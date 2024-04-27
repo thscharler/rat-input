@@ -239,7 +239,11 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
 
         let area = state.area.intersection(buf.area);
 
-        let selection = clamp_shift(state.selection(), state.offset(), state.width());
+        let selection = clamp_shift(
+            state.value.selection(),
+            state.value.offset(),
+            state.value.width(),
+        );
 
         let mut cit = state.value.rendered().graphemes(true).skip(state.offset());
         for col in 0..area.width as usize {
@@ -437,16 +441,6 @@ impl MaskedInputState {
     /// Offset shown. This is corrected if the cursor wouldn't be visible.
     pub fn set_offset(&mut self, offset: usize) {
         self.value.set_offset(offset);
-    }
-
-    /// Display width.
-    pub fn width(&self) -> usize {
-        self.value.width()
-    }
-
-    /// Display width
-    pub fn set_width(&mut self, width: usize) {
-        self.value.set_width(width);
     }
 
     /// Set the cursor position, reset selection.
