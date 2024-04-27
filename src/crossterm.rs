@@ -1,3 +1,20 @@
+#![allow(dead_code)]
+
+/// A copy of the crossterm-KeyModifiers. Plus a few combinations of modifiers.
+pub(crate) mod modifiers {
+    use crossterm::event::KeyModifiers;
+
+    pub(crate) const NONE: KeyModifiers = KeyModifiers::NONE;
+    pub(crate) const CONTROL: KeyModifiers = KeyModifiers::CONTROL;
+    pub(crate) const SHIFT: KeyModifiers = KeyModifiers::SHIFT;
+    pub(crate) const ALT: KeyModifiers = KeyModifiers::ALT;
+    pub(crate) const META: KeyModifiers = KeyModifiers::META;
+    pub(crate) const SUPER: KeyModifiers = KeyModifiers::SUPER;
+    pub(crate) const HYPER: KeyModifiers = KeyModifiers::HYPER;
+    pub(crate) const CONTROL_SHIFT: KeyModifiers = KeyModifiers::from_bits_truncate(0b0000_0011);
+    pub(crate) const ALT_SHIFT: KeyModifiers = KeyModifiers::from_bits_truncate(0b0000_0101);
+}
+
 /// This macro produces pattern matches for crossterm events.
 ///
 /// Syntax:
@@ -23,7 +40,7 @@ macro_rules! ct_event {
     (key press $keychar:pat) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::Char($keychar),
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
             kind: crossterm::event::KeyEventKind::Press,
             ..
         })
@@ -31,7 +48,7 @@ macro_rules! ct_event {
     (key press $mod:ident-$keychar:pat) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::Char($keychar),
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
             kind: crossterm::event::KeyEventKind::Press,
             ..
         })
@@ -39,7 +56,7 @@ macro_rules! ct_event {
     (key release $keychar:pat) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::Char($keychar),
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
             kind: crossterm::event::KeyEventKind::Release,
             ..
         })
@@ -47,7 +64,7 @@ macro_rules! ct_event {
     (key release $mod:ident-$keychar:pat) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::Char($keychar),
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
             kind: crossterm::event::KeyEventKind::Release,
             ..
         })
@@ -56,7 +73,7 @@ macro_rules! ct_event {
     (keycode press $code:ident) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::$code,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
             kind: crossterm::event::KeyEventKind::Press,
             ..
         })
@@ -64,7 +81,7 @@ macro_rules! ct_event {
     (keycode press $mod:ident-$code:ident) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::$code,
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
             kind: crossterm::event::KeyEventKind::Press,
             ..
         })
@@ -72,7 +89,7 @@ macro_rules! ct_event {
     (keycode release $code:ident) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::$code,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
             kind: crossterm::event::KeyEventKind::Release,
             ..
         })
@@ -80,7 +97,7 @@ macro_rules! ct_event {
     (keycode release $mod:ident-$code:ident) => {
         crossterm::event::Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::$code,
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
             kind: crossterm::event::KeyEventKind::Release,
             ..
         })
@@ -91,7 +108,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::$button),
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
     (mouse down $mod:ident-$button:ident for $col:ident, $row:ident ) => {
@@ -99,7 +116,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::$button),
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
         })
     };
     (mouse up $button:ident for $col:ident, $row:ident ) => {
@@ -107,7 +124,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::Up(crossterm::event::MouseButton::$button),
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
     (mouse up $mod:ident-$button:ident for $col:ident, $row:ident ) => {
@@ -115,7 +132,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::Up(crossterm::event::MouseButton::$button),
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
         })
     };
     (mouse drag $button:ident for $col:ident, $row:ident ) => {
@@ -123,7 +140,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::Drag(crossterm::event::MouseButton::$button),
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
     (mouse drag $mod:ident-$button:ident for $col:ident, $row:ident ) => {
@@ -131,14 +148,14 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::Drag(crossterm::event::MouseButton::$button),
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
         })
     };
 
     (mouse moved ) => {
         crossterm::event::Event::Mouse(crossterm::event::MouseEvent {
             kind: crossterm::event::MouseEventKind::Moved,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
             ..
         })
     };
@@ -147,7 +164,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::Moved,
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
 
@@ -156,7 +173,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::ScrollDown,
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
         })
     };
     (scroll down for $col:ident, $row:ident) => {
@@ -164,7 +181,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::ScrollDown,
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
     (scroll $mod:ident up for $col:ident, $row:ident) => {
@@ -172,7 +189,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::ScrollUp,
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::$mod,
+            modifiers: $crate::crossterm::modifiers::$mod,
         })
     };
     (scroll up for $col:ident, $row:ident) => {
@@ -180,7 +197,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::ScrollUp,
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
 
@@ -190,7 +207,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::ScrollLeft,
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
     //??
@@ -199,7 +216,7 @@ macro_rules! ct_event {
             kind: crossterm::event::MouseEventKind::ScrollRight,
             column: $col,
             row: $row,
-            modifiers: $crate::modifiers::NONE,
+            modifiers: $crate::crossterm::modifiers::NONE,
         })
     };
 }

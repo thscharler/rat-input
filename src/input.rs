@@ -6,32 +6,38 @@
 //! * Scrolls with the cursor.
 //! * Modes for focused and valid.
 //!
+//!
+//! The visual cursor must be set separately after rendering.
+//! It is accessible as [TextInputState::visual_cursor()] or [TextInputState::cursor] after rendering.
+//!
+//! Event handling by calling the freestanding fn [crate::masked_input::handle_events].
+//! There's [handle_mouse_events] if you want to override the default key bindings but keep
+//! the mouse behaviour.
+//!
 
 use crate::_private::NonExhaustive;
-use crate::util::{MouseFlags, Outcome};
-use crate::{ct_event, util};
+use crate::util::MouseFlags;
+use crate::{ct_event, util, Outcome};
 #[allow(unused_imports)]
 use log::debug;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Margin, Position, Rect};
+use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{BlockExt, StatefulWidget};
-use ratatui::style::{Style, Stylize};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, StatefulWidgetRef, WidgetRef};
-use ratatui::Frame;
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Text input widget.
 #[derive(Debug)]
 pub struct TextInput<'a> {
-    pub block: Option<Block<'a>>,
-    pub style: Style,
-    pub focus_style: Style,
-    pub select_style: Style,
-    pub invalid_style: Style,
-    pub focused: bool,
-    pub valid: bool,
-    pub non_exhaustive: NonExhaustive,
+    block: Option<Block<'a>>,
+    style: Style,
+    focus_style: Style,
+    select_style: Style,
+    invalid_style: Style,
+    focused: bool,
+    valid: bool,
 }
 
 /// Combined style for the widget.
@@ -44,7 +50,7 @@ pub struct TextInputStyle {
     pub non_exhaustive: NonExhaustive,
 }
 
-impl Default for TextInput {
+impl<'a> Default for TextInput<'a> {
     fn default() -> Self {
         Self {
             block: None,
@@ -54,7 +60,6 @@ impl Default for TextInput {
             invalid_style: Default::default(),
             focused: true,
             valid: true,
-            non_exhaustive: NonExhaustive,
         }
     }
 }
@@ -128,15 +133,15 @@ impl<'a> TextInput<'a> {
     }
 }
 
-impl StatefulWidgetRef for TextInput {
+impl<'a> StatefulWidget for TextInput<'a> {
     type State = TextInputState;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         StatefulWidgetRef::render_ref(&self, area, buf, state);
     }
 }
 
-impl StatefulWidgetRef for TextInput {
+impl<'a> StatefulWidgetRef for TextInput<'a> {
     type State = TextInputState;
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -162,7 +167,6 @@ impl StatefulWidgetRef for TextInput {
         };
 
         let area = state.area.intersection(buf.area);
-        let invalid_style = self.focus_style.patch(self.invalid_style);
 
         let selection = util::clamp_shift(state.selection(), state.offset(), state.width());
 
@@ -427,6 +431,11 @@ impl TextInputState {
             self.value.offset() + rpos as usize
         };
         self.value.set_cursor(pos, extend_selection);
+    }
+
+    /// The current text cursor as a absolute screen position.
+    pub fn visual_cursor(&self) -> Position {
+        self.cursor
     }
 
     /// Move to the next char.
