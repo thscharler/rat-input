@@ -371,7 +371,7 @@ pub fn handle_events(
             }
             Outcome::Changed
         } else {
-            Outcome::Unchanged
+            Outcome::Unused
         }
     };
 

@@ -168,7 +168,11 @@ impl<'a> StatefulWidgetRef for TextInput<'a> {
 
         let area = state.area.intersection(buf.area);
 
-        let selection = util::clamp_shift(state.selection(), state.offset(), state.width());
+        let selection = util::clamp_shift(
+            state.value.selection(),
+            state.value.offset(),
+            state.value.width(),
+        );
 
         let mut cit = state.value.value().graphemes(true).skip(state.offset());
         for col in 0..area.width as usize {
@@ -285,7 +289,7 @@ pub fn handle_events(
             }
             Outcome::Changed
         } else {
-            Outcome::Unchanged
+            Outcome::Unused
         }
     };
 
@@ -339,16 +343,6 @@ impl TextInputState {
     /// Offset shown. This is corrected if the cursor wouldn't be visible.
     pub fn set_offset(&mut self, offset: usize) {
         self.value.set_offset(offset);
-    }
-
-    /// Display width.
-    pub fn width(&self) -> usize {
-        self.value.width()
-    }
-
-    /// Display width
-    pub fn set_width(&mut self, width: usize) {
-        self.value.set_width(width);
     }
 
     /// Set the cursor position, reset selection.
