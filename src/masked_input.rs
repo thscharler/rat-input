@@ -5,7 +5,6 @@
 //! * Scrolls with the cursor.
 //! * Modes for focus and valid.
 //! * Info-overlay for sub-fields without value.
-//! * Partially invalid input is possible.
 //! * Localization with [format_num_pattern::NumberSymbols]
 //!
 //! * Accepts an input mask:
@@ -221,20 +220,24 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
             }
         }
 
-        let (style, select_style, invalid_style, invalid_select_style) = if self.focused {
-            (
-                self.focus_style,
-                self.select_style,
-                self.focus_style.patch(self.invalid_style),
-                self.select_style.patch(self.invalid_style),
-            )
+        let (style, select_style) = if self.focused {
+            if self.valid {
+                (self.focus_style, self.select_style)
+            } else {
+                (
+                    self.focus_style.patch(self.invalid_style),
+                    self.select_style.patch(self.invalid_style),
+                )
+            }
         } else {
-            (
-                self.style,
-                self.style,
-                self.style.patch(self.invalid_style),
-                self.style.patch(self.invalid_style),
-            )
+            if self.valid {
+                (self.style, self.style)
+            } else {
+                (
+                    self.style.patch(self.invalid_style),
+                    self.style.patch(self.invalid_style),
+                )
+            }
         };
 
         let area = state.area.intersection(buf.area);
@@ -254,27 +257,10 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
                 cell.set_char(' ');
             }
 
-            let valid = if let Some(valid_mask) = &state.valid_mask {
-                valid_mask
-                    .get(state.offset() + col)
-                    .copied()
-                    .unwrap_or(true)
-            } else {
-                self.valid
-            };
-
             if selection.contains(&col) {
-                if self.valid {
-                    cell.set_style(select_style);
-                } else {
-                    cell.set_style(invalid_select_style);
-                }
+                cell.set_style(select_style);
             } else {
-                if valid {
-                    cell.set_style(style);
-                } else {
-                    cell.set_style(invalid_style);
-                }
+                cell.set_style(style);
             }
         }
 
@@ -292,8 +278,6 @@ pub struct MaskedInputState {
     pub area: Rect,
     /// Mouse selection in progress.
     pub mouse: MouseFlags,
-    /// Valid mask. Which characters of the input are valid/not valid.
-    pub valid_mask: Option<Vec<bool>>,
     /// Editing core.
     pub value: InputMaskCore,
     /// Construct with `..Default::default()`
@@ -306,7 +290,6 @@ impl Default for MaskedInputState {
             cursor: Default::default(),
             area: Default::default(),
             mouse: Default::default(),
-            valid_mask: None,
             value: Default::default(),
             non_exhaustive: NonExhaustive,
         }
@@ -359,7 +342,7 @@ pub fn handle_events(
                     let next = state.next_word_boundary();
                     state.remove_selection(state.cursor()..next)?;
                 }
-                ct_event!(key press CONTROL-'d') => state.set_value(""),
+                ct_event!(key press CONTROL-'d') => state.set_value(state.default_value()),
                 ct_event!(keycode press CONTROL_SHIFT-Backspace) => {
                     state.remove_selection(0..state.cursor())?
                 }
@@ -476,16 +459,6 @@ impl MaskedInputState {
         self.value.display_mask()
     }
 
-    /// Sets a mask of valid/invalid characters.
-    pub fn set_valid_mask(&mut self, v: Option<Vec<bool>>) {
-        self.valid_mask = v;
-    }
-
-    /// Mask of valid/invalid characters.
-    pub fn valid_mask(&self) -> &Option<Vec<bool>> {
-        &self.valid_mask
-    }
-
     /// Set the input mask. This overwrites the display mask and the value
     /// with a default representation of the mask.
     ///
@@ -538,6 +511,11 @@ impl MaskedInputState {
         self.value.set_num_symbols(sym);
     }
 
+    /// Create a default value according to the mask.
+    pub fn default_value(&self) -> String {
+        self.value.default_value()
+    }
+
     /// Set the value.
     ///
     /// No checks if the value conforms to the mask.
@@ -550,6 +528,11 @@ impl MaskedInputState {
     /// Value with all punctuation and default values according to the mask type.
     pub fn value(&self) -> &str {
         self.value.value()
+    }
+
+    /// Value split along any separators
+    pub fn value_parts(&self) -> Vec<String> {
+        self.value.value_parts()
     }
 
     /// Value without optional whitespace and grouping separators. Might be easier to parse.
@@ -1556,6 +1539,11 @@ pub mod core {
             buf
         }
 
+        /// Create a default value according to the mask.
+        pub fn default_value(&self) -> String {
+            MaskToken::empty_section(&self.mask)
+        }
+
         /// Sets the value.
         /// No checks if the value conforms to the mask.
         /// If the value is too short it will be filled with space.
@@ -1592,6 +1580,32 @@ pub mod core {
         /// Value
         pub fn value(&self) -> &str {
             self.value.as_str()
+        }
+
+        /// Value split along any separators
+        pub fn value_parts(&self) -> Vec<String> {
+            let mut res = Vec::new();
+
+            let mut buf = String::new();
+            for (t, c) in self
+                .mask
+                .iter()
+                .zip(self.value.graphemes(true).chain(repeat_with(|| "")))
+            {
+                match t.right {
+                    Mask::Separator(_) => {
+                        if !buf.is_empty() {
+                            res.push(buf);
+                            buf = String::new();
+                        }
+                    }
+                    _ => {
+                        buf.push_str(c);
+                    }
+                }
+            }
+
+            res
         }
 
         /// Value without whitespace and grouping separators. Might be easier to parse.

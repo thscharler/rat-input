@@ -30,7 +30,6 @@ Text input with an input mask.
     * text: `lac_`
     * arbitrary separators between sub-fields
 * info-overlay for sub-fields without value
-* partially invalid input is possible
 * Localization with [rat-input::NumberSymbols]
 
  
