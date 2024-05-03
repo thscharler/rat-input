@@ -70,8 +70,6 @@ use crate::util::clamp_shift;
 use crate::util::MouseFlags;
 use crate::{ct_event, util, Outcome};
 use format_num_pattern::NumberSymbols;
-#[allow(unused_imports)]
-use log::debug;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{BlockExt, Stylize};
@@ -680,8 +678,6 @@ pub mod core {
     use crate::util;
     use format_num_pattern as number;
     use format_num_pattern::{CurrencySym, NumberFormat, NumberSymbols};
-    #[allow(unused_imports)]
-    use log::debug;
     use std::fmt::{Debug, Display, Formatter};
     use std::iter::{once, repeat_with};
     use std::ops::Range;

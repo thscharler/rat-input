@@ -18,8 +18,6 @@
 use crate::_private::NonExhaustive;
 use crate::util::MouseFlags;
 use crate::{ct_event, util, Outcome};
-#[allow(unused_imports)]
-use log::debug;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{BlockExt, StatefulWidget};
@@ -489,8 +487,6 @@ impl TextInputState {
 
 pub mod core {
     use crate::util;
-    #[allow(unused_imports)]
-    use log::debug;
     use std::mem;
     use std::ops::Range;
     use unicode_segmentation::UnicodeSegmentation;
