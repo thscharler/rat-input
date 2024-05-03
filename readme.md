@@ -24,7 +24,7 @@ Text input with an input mask.
 
 * Text selection with keyboard + mouse
 * Possible states as styles: Focused, Invalid
-* Pattern based input:
+* Pattern based input -> "##,###,##0.00"
     * number patterns: `09#-+.,`
     * numeric text: `HhOoDd`
     * text: `lac_`
