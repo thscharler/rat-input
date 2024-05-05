@@ -66,11 +66,10 @@
 
 use crate::_private::NonExhaustive;
 use crate::events::{DefaultKeys, HandleEvent, MouseOnly, Outcome};
-use crate::input::TextInputState;
 use crate::masked_input::core::InputMaskCore;
 use crate::util::clamp_shift;
 use crate::util::MouseFlags;
-use crate::{ct_event, util, Outcome};
+use crate::{ct_event, util};
 use crossterm::event::Event;
 use format_num_pattern::NumberSymbols;
 use ratatui::buffer::Buffer;
@@ -140,7 +139,7 @@ impl<'a> MaskedInput<'a> {
     }
 
     /// Set the combined style.
-    pub fn style(mut self, style: MaskedInputStyle) -> Self {
+    pub fn styles(mut self, style: MaskedInputStyle) -> Self {
         self.style = style.style;
         self.focus_style = style.focus;
         self.select_style = style.select;
@@ -149,7 +148,7 @@ impl<'a> MaskedInput<'a> {
     }
 
     /// Base text style.
-    pub fn base_style(mut self, style: impl Into<Style>) -> Self {
+    pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.style = style.into();
         self
     }

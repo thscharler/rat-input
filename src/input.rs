@@ -77,7 +77,7 @@ impl Default for TextInputStyle {
 
 impl<'a> TextInput<'a> {
     /// Set the combined style.
-    pub fn style(mut self, style: TextInputStyle) -> Self {
+    pub fn styles(mut self, style: TextInputStyle) -> Self {
         self.style = style.style;
         self.focus_style = style.focus;
         self.select_style = style.select;
@@ -86,7 +86,7 @@ impl<'a> TextInput<'a> {
     }
 
     /// Base text style.
-    pub fn base_style(mut self, style: impl Into<Style>) -> Self {
+    pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.style = style.into();
         self
     }
