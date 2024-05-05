@@ -65,10 +65,13 @@
 //!
 
 use crate::_private::NonExhaustive;
+use crate::events::{DefaultKeys, HandleEvent, MouseOnly, Outcome};
+use crate::input::TextInputState;
 use crate::masked_input::core::InputMaskCore;
 use crate::util::clamp_shift;
 use crate::util::MouseFlags;
 use crate::{ct_event, util, Outcome};
+use crossterm::event::Event;
 use format_num_pattern::NumberSymbols;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
@@ -294,6 +297,118 @@ impl Default for MaskedInputState {
     }
 }
 
+impl HandleEvent<crossterm::event::Event, DefaultKeys, Result<Outcome, fmt::Error>>
+    for MaskedInputState
+{
+    fn handle(
+        &mut self,
+        event: &Event,
+        focus: bool,
+        keymap: DefaultKeys,
+    ) -> Result<Outcome, fmt::Error> {
+        let r = 'f: {
+            if focus {
+                match event {
+                    ct_event!(keycode press Left) => self.move_to_prev(false),
+                    ct_event!(keycode press Right) => self.move_to_next(false),
+                    ct_event!(keycode press CONTROL-Left) => {
+                        let pos = self.prev_word_boundary();
+                        self.set_cursor(pos, false);
+                    }
+                    ct_event!(keycode press CONTROL-Right) => {
+                        let pos = self.next_word_boundary();
+                        self.set_cursor(pos, false);
+                    }
+                    ct_event!(keycode press Home) => self.set_cursor(0, false),
+                    ct_event!(keycode press End) => self.set_cursor(self.len(), false),
+                    ct_event!(keycode press SHIFT-Left) => self.move_to_prev(true),
+                    ct_event!(keycode press SHIFT-Right) => self.move_to_next(true),
+                    ct_event!(keycode press CONTROL_SHIFT-Left) => {
+                        let pos = self.prev_word_boundary();
+                        self.set_cursor(pos, true);
+                    }
+                    ct_event!(keycode press CONTROL_SHIFT-Right) => {
+                        let pos = self.next_word_boundary();
+                        self.set_cursor(pos, true);
+                    }
+                    ct_event!(keycode press SHIFT-Home) => self.set_cursor(0, true),
+                    ct_event!(keycode press SHIFT-End) => self.set_cursor(self.len(), true),
+                    ct_event!(key press CONTROL-'a') => self.set_selection(0, self.len()),
+                    ct_event!(keycode press Backspace) => self.delete_prev_char()?,
+                    ct_event!(keycode press Delete) => self.delete_next_char()?,
+                    ct_event!(keycode press CONTROL-Backspace) => {
+                        let prev = self.prev_word_boundary();
+                        self.remove_selection(prev..self.cursor())?;
+                    }
+                    ct_event!(keycode press CONTROL-Delete) => {
+                        let next = self.next_word_boundary();
+                        self.remove_selection(self.cursor()..next)?;
+                    }
+                    ct_event!(key press CONTROL-'d') => self.set_value(self.default_value()),
+                    ct_event!(keycode press CONTROL_SHIFT-Backspace) => {
+                        self.remove_selection(0..self.cursor())?
+                    }
+                    ct_event!(keycode press CONTROL_SHIFT-Delete) => {
+                        self.remove_selection(self.cursor()..self.len())?
+                    }
+                    ct_event!(key press c) | ct_event!(key press SHIFT-c) => {
+                        self.insert_char(*c)?
+                    }
+                    _ => break 'f Outcome::NotUsed,
+                }
+                Outcome::Changed
+            } else {
+                Outcome::NotUsed
+            }
+        };
+
+        match r {
+            Outcome::NotUsed => HandleEvent::handle(self, event, focus, MouseOnly),
+            v => Ok(v),
+        }
+    }
+}
+
+impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>>
+    for MaskedInputState
+{
+    fn handle(
+        &mut self,
+        event: &Event,
+        focus: bool,
+        keymap: MouseOnly,
+    ) -> Result<Outcome, fmt::Error> {
+        let r = match event {
+            ct_event!(mouse down Left for column,row) => {
+                if self.area.contains(Position::new(*column, *row)) {
+                    self.mouse.set_drag();
+                    let c = column - self.area.x;
+                    self.set_offset_relative_cursor(c as isize, false);
+                    Outcome::Changed
+                } else {
+                    Outcome::NotUsed
+                }
+            }
+            ct_event!(mouse drag Left for column, _row) => {
+                if self.mouse.do_drag() {
+                    let c = (*column as isize) - (self.area.x as isize);
+                    self.set_offset_relative_cursor(c, true);
+                    Outcome::Changed
+                } else {
+                    Outcome::NotUsed
+                }
+            }
+            ct_event!(mouse moved) => {
+                self.mouse.clear_drag();
+                Outcome::NotUsed
+            }
+            _ => Outcome::NotUsed,
+        };
+
+        Ok(r)
+    }
+}
+
 /// Handle all events.
 /// Text events are only processed if focus is true.
 /// Mouse events are processed if they are in range.
@@ -302,64 +417,7 @@ pub fn handle_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> Result<Outcome, fmt::Error> {
-    let r = 'f: {
-        if focus {
-            match event {
-                ct_event!(keycode press Left) => state.move_to_prev(false),
-                ct_event!(keycode press Right) => state.move_to_next(false),
-                ct_event!(keycode press CONTROL-Left) => {
-                    let pos = state.prev_word_boundary();
-                    state.set_cursor(pos, false);
-                }
-                ct_event!(keycode press CONTROL-Right) => {
-                    let pos = state.next_word_boundary();
-                    state.set_cursor(pos, false);
-                }
-                ct_event!(keycode press Home) => state.set_cursor(0, false),
-                ct_event!(keycode press End) => state.set_cursor(state.len(), false),
-                ct_event!(keycode press SHIFT-Left) => state.move_to_prev(true),
-                ct_event!(keycode press SHIFT-Right) => state.move_to_next(true),
-                ct_event!(keycode press CONTROL_SHIFT-Left) => {
-                    let pos = state.prev_word_boundary();
-                    state.set_cursor(pos, true);
-                }
-                ct_event!(keycode press CONTROL_SHIFT-Right) => {
-                    let pos = state.next_word_boundary();
-                    state.set_cursor(pos, true);
-                }
-                ct_event!(keycode press SHIFT-Home) => state.set_cursor(0, true),
-                ct_event!(keycode press SHIFT-End) => state.set_cursor(state.len(), true),
-                ct_event!(key press CONTROL-'a') => state.set_selection(0, state.len()),
-                ct_event!(keycode press Backspace) => state.delete_prev_char()?,
-                ct_event!(keycode press Delete) => state.delete_next_char()?,
-                ct_event!(keycode press CONTROL-Backspace) => {
-                    let prev = state.prev_word_boundary();
-                    state.remove_selection(prev..state.cursor())?;
-                }
-                ct_event!(keycode press CONTROL-Delete) => {
-                    let next = state.next_word_boundary();
-                    state.remove_selection(state.cursor()..next)?;
-                }
-                ct_event!(key press CONTROL-'d') => state.set_value(state.default_value()),
-                ct_event!(keycode press CONTROL_SHIFT-Backspace) => {
-                    state.remove_selection(0..state.cursor())?
-                }
-                ct_event!(keycode press CONTROL_SHIFT-Delete) => {
-                    state.remove_selection(state.cursor()..state.len())?
-                }
-                ct_event!(key press c) | ct_event!(key press SHIFT-c) => state.insert_char(*c)?,
-                _ => break 'f Outcome::Unused,
-            }
-            Outcome::Changed
-        } else {
-            Outcome::Unused
-        }
-    };
-
-    match r {
-        Outcome::Unused => handle_mouse_events(state, event),
-        v => Ok(v),
-    }
+    HandleEvent::handle(state, event, focus, DefaultKeys)
 }
 
 /// Handle only mouse-events.
@@ -367,34 +425,7 @@ pub fn handle_mouse_events(
     state: &mut MaskedInputState,
     event: &crossterm::event::Event,
 ) -> Result<Outcome, fmt::Error> {
-    let r = match event {
-        ct_event!(mouse down Left for column,row) => {
-            if state.area.contains(Position::new(*column, *row)) {
-                state.mouse.set_drag();
-                let c = column - state.area.x;
-                state.set_offset_relative_cursor(c as isize, false);
-                Outcome::Changed
-            } else {
-                Outcome::Unused
-            }
-        }
-        ct_event!(mouse drag Left for column, _row) => {
-            if state.mouse.do_drag() {
-                let c = (*column as isize) - (state.area.x as isize);
-                state.set_offset_relative_cursor(c, true);
-                Outcome::Changed
-            } else {
-                Outcome::Unused
-            }
-        }
-        ct_event!(mouse moved) => {
-            state.mouse.clear_drag();
-            Outcome::Unused
-        }
-        _ => Outcome::Unused,
-    };
-
-    Ok(r)
+    HandleEvent::handle(state, event, false, MouseOnly)
 }
 
 impl MaskedInputState {
