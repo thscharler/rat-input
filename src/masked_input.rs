@@ -70,7 +70,6 @@ use crate::masked_input::core::InputMaskCore;
 use crate::util::clamp_shift;
 use crate::util::MouseFlags;
 use crate::{ct_event, util};
-use crossterm::event::Event;
 use format_num_pattern::NumberSymbols;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
@@ -301,9 +300,9 @@ impl HandleEvent<crossterm::event::Event, DefaultKeys, Result<Outcome, fmt::Erro
 {
     fn handle(
         &mut self,
-        event: &Event,
+        event: &crossterm::event::Event,
         focus: bool,
-        keymap: DefaultKeys,
+        _keymap: DefaultKeys,
     ) -> Result<Outcome, fmt::Error> {
         let r = 'f: {
             if focus {
@@ -373,9 +372,9 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>
 {
     fn handle(
         &mut self,
-        event: &Event,
-        focus: bool,
-        keymap: MouseOnly,
+        event: &crossterm::event::Event,
+        _focus: bool,
+        _keymap: MouseOnly,
     ) -> Result<Outcome, fmt::Error> {
         let r = match event {
             ct_event!(mouse down Left for column,row) => {
