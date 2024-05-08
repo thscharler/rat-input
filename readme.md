@@ -32,4 +32,4 @@ Text input with an input mask.
 * info-overlay for sub-fields without value
 * Localization with [rat-input::NumberSymbols]
 
- 
+#[Button](crate::button::Button)

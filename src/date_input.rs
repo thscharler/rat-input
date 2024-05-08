@@ -1,9 +1,9 @@
 use crate::_private::NonExhaustive;
-use crate::ct_event;
-use crate::events::{FocusKeys, HandleEvent, MouseOnly, Outcome};
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
+use crate::Outcome;
 use chrono::format::{Fixed, Item, Numeric, Pad, StrftimeItems};
 use chrono::{Datelike, Days, Local, Months, NaiveDate};
+use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{StatefulWidget, Style};

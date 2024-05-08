@@ -2,9 +2,9 @@
 //! A button widget.
 //!
 
+use crate::Outcome;
 use crate::_private::NonExhaustive;
-use crate::ct_event;
-use crate::events::{FocusKeys, HandleEvent, MouseOnly, Outcome};
+use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::prelude::{BlockExt, Span, StatefulWidget};

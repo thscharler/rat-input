@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use chrono::Date;
 use crossterm::cursor::{DisableBlinking, EnableBlinking, SetCursorStyle};
 use crossterm::event::{
     DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, KeyCode,
@@ -9,11 +8,10 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+use rat_event::{FocusKeys, HandleEvent};
 use rat_input::date_input::{DateInput, DateInputState};
-use rat_input::events::{FocusKeys, HandleEvent, Outcome};
-use rat_input::input::{TextInput, TextInputState};
+use rat_input::Outcome;
 use ratatui::backend::CrosstermBackend;
-use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
 use ratatui::text::Span;
@@ -184,6 +182,6 @@ fn handle_input(
     _data: &mut Data,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
-    let r = HandleEvent::handle(&mut state.input, event, FocusKeys)?;
+    let r = state.input.handle(event, FocusKeys)?;
     Ok(r)
 }

@@ -70,12 +70,12 @@
 //!
 
 use crate::_private::NonExhaustive;
-use crate::events::{FocusKeys, HandleEvent, MouseOnly, Outcome};
 use crate::masked_input::core::InputMaskCore;
 use crate::util::clamp_shift;
 use crate::util::MouseFlags;
-use crate::{ct_event, util};
+use crate::{util, Outcome};
 use format_num_pattern::NumberSymbols;
+use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{BlockExt, Stylize};
