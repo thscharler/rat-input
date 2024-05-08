@@ -9,7 +9,7 @@ use crossterm::terminal::{
 };
 use crossterm::ExecutableCommand;
 use rat_input::button::{Button, ButtonOutcome, ButtonState};
-use rat_input::events::{DefaultKeys, HandleEvent, Outcome};
+use rat_input::events::{HandleEvent, MouseOnly, Outcome};
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -230,7 +230,7 @@ fn handle_buttons(
     data: &mut Data,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
-    match HandleEvent::handle(&mut state.button1, event, false, DefaultKeys) {
+    match HandleEvent::handle(&mut state.button1, event, MouseOnly) {
         ButtonOutcome::Pressed => {
             data.p0 = !data.p0;
             return Ok(Outcome::Changed);
@@ -238,7 +238,7 @@ fn handle_buttons(
         ButtonOutcome::NotUsed => {}
         v => return Ok(v.into()),
     };
-    match HandleEvent::handle(&mut state.button2, event, false, DefaultKeys) {
+    match HandleEvent::handle(&mut state.button2, event, MouseOnly) {
         ButtonOutcome::Pressed => {
             data.p1 = !data.p1;
             return Ok(Outcome::Changed);
@@ -246,7 +246,7 @@ fn handle_buttons(
         ButtonOutcome::NotUsed => {}
         v => return Ok(v.into()),
     };
-    match HandleEvent::handle(&mut state.button3, event, false, DefaultKeys) {
+    match HandleEvent::handle(&mut state.button3, event, MouseOnly) {
         ButtonOutcome::Pressed => {
             data.p2 = !data.p2;
             return Ok(Outcome::Changed);
