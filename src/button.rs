@@ -4,7 +4,7 @@
 
 use crate::_private::NonExhaustive;
 use crate::ct_event;
-use crate::events::{DefaultKeys, HandleEvent, MouseOnly, Outcome};
+use crate::events::{FocusKeys, HandleEvent, MouseOnly, Outcome};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::prelude::{BlockExt, Span, StatefulWidget};
@@ -193,31 +193,22 @@ impl From<ButtonOutcome> for Outcome {
     }
 }
 
-impl HandleEvent<crossterm::event::Event, DefaultKeys, ButtonOutcome> for ButtonState {
-    fn handle(
-        &mut self,
-        event: &crossterm::event::Event,
-        focus: bool,
-        _keymap: DefaultKeys,
-    ) -> ButtonOutcome {
-        let r = if focus {
-            match event {
-                ct_event!(keycode press Enter) => {
-                    self.armed = true;
-                    ButtonOutcome::Changed
-                }
-                ct_event!(keycode release Enter) => {
-                    self.armed = false;
-                    ButtonOutcome::Pressed
-                }
-                _ => ButtonOutcome::NotUsed,
+impl HandleEvent<crossterm::event::Event, FocusKeys, ButtonOutcome> for ButtonState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> ButtonOutcome {
+        let r = match event {
+            ct_event!(keycode press Enter) => {
+                self.armed = true;
+                ButtonOutcome::Changed
             }
-        } else {
-            ButtonOutcome::NotUsed
+            ct_event!(keycode release Enter) => {
+                self.armed = false;
+                ButtonOutcome::Pressed
+            }
+            _ => ButtonOutcome::NotUsed,
         };
 
         if r == ButtonOutcome::NotUsed {
-            HandleEvent::handle(self, event, focus, MouseOnly)
+            HandleEvent::handle(self, event, MouseOnly)
         } else {
             r
         }
@@ -225,12 +216,7 @@ impl HandleEvent<crossterm::event::Event, DefaultKeys, ButtonOutcome> for Button
 }
 
 impl HandleEvent<crossterm::event::Event, MouseOnly, ButtonOutcome> for ButtonState {
-    fn handle(
-        &mut self,
-        event: &crossterm::event::Event,
-        _focus: bool,
-        _keymap: MouseOnly,
-    ) -> ButtonOutcome {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> ButtonOutcome {
         match event {
             ct_event!(mouse down Left for column, row) => {
                 if self.area.contains(Position::new(*column, *row)) {
@@ -256,4 +242,27 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, ButtonOutcome> for ButtonSt
             _ => ButtonOutcome::NotUsed,
         }
     }
+}
+
+/// Handle all events.
+/// Text events are only processed if focus is true.
+/// Mouse events are processed if they are in range.
+pub fn handle_events(
+    state: &mut ButtonState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> ButtonOutcome {
+    if focus {
+        HandleEvent::handle(state, event, FocusKeys)
+    } else {
+        HandleEvent::handle(state, event, MouseOnly)
+    }
+}
+
+/// Handle only mouse-events.
+pub fn handle_mouse_events(
+    state: &mut ButtonState,
+    event: &crossterm::event::Event,
+) -> ButtonOutcome {
+    HandleEvent::handle(state, event, MouseOnly)
 }
