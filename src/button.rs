@@ -17,14 +17,51 @@ use ratatui::widgets::{Block, StatefulWidgetRef, WidgetRef};
 pub struct Button<'a> {
     text: Text<'a>,
     style: Style,
+    focus_style: Option<Style>,
     armed_style: Option<Style>,
     block: Option<Block<'a>>,
+    focused: bool,
+}
+
+/// Composite style.
+#[derive(Debug)]
+pub struct ButtonStyle {
+    pub style: Style,
+    pub focus: Option<Style>,
+    pub armed: Option<Style>,
+    pub non_exhaustive: NonExhaustive,
+}
+
+impl Default for ButtonStyle {
+    fn default() -> Self {
+        Self {
+            style: Default::default(),
+            focus: Default::default(),
+            armed: Default::default(),
+            non_exhaustive: NonExhaustive,
+        }
+    }
 }
 
 impl<'a> Button<'a> {
     #[inline]
+    pub fn styles(mut self, styles: ButtonStyle) -> Self {
+        self.style = styles.style;
+        self.focus_style = styles.focus;
+        self.armed_style = styles.armed;
+        self
+    }
+
+    #[inline]
     pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.style = style.into();
+        self
+    }
+
+    /// Style when focused.
+    #[inline]
+    pub fn focus_style(mut self, style: impl Into<Style>) -> Self {
+        self.focus_style = Some(style.into());
         self
     }
 
@@ -43,6 +80,12 @@ impl<'a> Button<'a> {
     #[inline]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
+        self
+    }
+
+    /// Renders differently if focused.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 }
@@ -126,15 +169,25 @@ impl<'a> StatefulWidgetRef for Button<'a> {
 
         self.block.render_ref(area, buf);
 
+        let focus_style = if let Some(focus_style) = self.focus_style {
+            focus_style
+        } else {
+            self.style
+        };
         let armed_style = if let Some(armed_style) = self.armed_style {
             armed_style
         } else {
             self.style.reversed()
         };
+
         if state.armed {
             buf.set_style(state.inner_area, armed_style);
         } else {
-            buf.set_style(state.inner_area, self.style);
+            if self.focused {
+                buf.set_style(state.inner_area, focus_style);
+            } else {
+                buf.set_style(state.inner_area, self.style);
+            }
         }
 
         let layout = Layout::vertical([

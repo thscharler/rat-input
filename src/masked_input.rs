@@ -91,9 +91,9 @@ pub struct MaskedInput<'a> {
     show_compact: bool,
     block: Option<Block<'a>>,
     style: Style,
-    focus_style: Style,
-    select_style: Style,
-    invalid_style: Style,
+    focus_style: Option<Style>,
+    select_style: Option<Style>,
+    invalid_style: Option<Style>,
     focused: bool,
     valid: bool,
 }
@@ -102,9 +102,9 @@ pub struct MaskedInput<'a> {
 #[derive(Debug)]
 pub struct MaskedInputStyle {
     pub style: Style,
-    pub focus: Style,
-    pub select: Style,
-    pub invalid: Style,
+    pub focus: Option<Style>,
+    pub select: Option<Style>,
+    pub invalid: Option<Style>,
     pub non_exhaustive: NonExhaustive,
 }
 
@@ -128,7 +128,7 @@ impl<'a> Default for MaskedInput<'a> {
             style: Default::default(),
             focus_style: Default::default(),
             select_style: Default::default(),
-            invalid_style: Style::default().red().underlined(),
+            invalid_style: Default::default(),
             focused: true,
             valid: true,
         }
@@ -159,19 +159,19 @@ impl<'a> MaskedInput<'a> {
 
     /// Style when focused.
     pub fn focus_style(mut self, style: impl Into<Style>) -> Self {
-        self.focus_style = style.into();
+        self.focus_style = Some(style.into());
         self
     }
 
     /// Style for selection
     pub fn select_style(mut self, style: impl Into<Style>) -> Self {
-        self.select_style = style.into();
+        self.select_style = Some(style.into());
         self
     }
 
     /// Style for the invalid indicator.
     pub fn invalid_style(mut self, style: impl Into<Style>) -> Self {
-        self.invalid_style = style.into();
+        self.invalid_style = Some(style.into());
         self
     }
 
@@ -224,13 +224,29 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
             }
         }
 
+        let focus_style = if let Some(focus_style) = self.focus_style {
+            focus_style
+        } else {
+            self.style
+        };
+        let select_style = if let Some(select_style) = self.select_style {
+            select_style
+        } else {
+            self.style.reversed()
+        };
+        let invalid_style = if let Some(invalid_style) = self.invalid_style {
+            invalid_style
+        } else {
+            Style::default().red()
+        };
+
         let (style, select_style) = if self.focused {
             if self.valid {
-                (self.focus_style, self.select_style)
+                (focus_style, select_style)
             } else {
                 (
-                    self.focus_style.patch(self.invalid_style),
-                    self.select_style.patch(self.invalid_style),
+                    focus_style.patch(invalid_style),
+                    select_style.patch(invalid_style),
                 )
             }
         } else {
@@ -238,8 +254,8 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
                 (self.style, self.style)
             } else {
                 (
-                    self.style.patch(self.invalid_style),
-                    self.style.patch(self.invalid_style),
+                    self.style.patch(invalid_style),
+                    self.style.patch(invalid_style),
                 )
             }
         };

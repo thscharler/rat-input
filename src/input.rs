@@ -22,7 +22,7 @@ use crate::{ct_event, util};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{BlockExt, StatefulWidget};
-use ratatui::style::Style;
+use ratatui::style::{Style, Stylize};
 use ratatui::widgets::{Block, StatefulWidgetRef, WidgetRef};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
@@ -32,9 +32,9 @@ use unicode_segmentation::UnicodeSegmentation;
 pub struct TextInput<'a> {
     block: Option<Block<'a>>,
     style: Style,
-    focus_style: Style,
-    select_style: Style,
-    invalid_style: Style,
+    focus_style: Option<Style>,
+    select_style: Option<Style>,
+    invalid_style: Option<Style>,
     focused: bool,
     valid: bool,
 }
@@ -43,9 +43,9 @@ pub struct TextInput<'a> {
 #[derive(Debug)]
 pub struct TextInputStyle {
     pub style: Style,
-    pub focus: Style,
-    pub select: Style,
-    pub invalid: Style,
+    pub focus: Option<Style>,
+    pub select: Option<Style>,
+    pub invalid: Option<Style>,
     pub non_exhaustive: NonExhaustive,
 }
 
@@ -93,20 +93,20 @@ impl<'a> TextInput<'a> {
 
     /// Style when focused.
     pub fn focus_style(mut self, style: impl Into<Style>) -> Self {
-        self.focus_style = style.into();
+        self.focus_style = Some(style.into());
         self
     }
 
     /// Style for selection
     pub fn select_style(mut self, style: impl Into<Style>) -> Self {
-        self.select_style = style.into();
+        self.select_style = Some(style.into());
         self
     }
 
     /// Style for the invalid indicator.
     /// This is patched onto either base_style or focus_style
     pub fn invalid_style(mut self, style: impl Into<Style>) -> Self {
-        self.invalid_style = style.into();
+        self.invalid_style = Some(style.into());
         self
     }
 
@@ -149,20 +149,40 @@ impl<'a> StatefulWidgetRef for TextInput<'a> {
 
         self.block.render_ref(area, buf);
 
-        let (style, select_style, invalid_style, invalid_select_style) = if self.focused {
-            (
-                self.focus_style,
-                self.select_style,
-                self.focus_style.patch(self.invalid_style),
-                self.select_style.patch(self.invalid_style),
-            )
+        let focus_style = if let Some(focus_style) = self.focus_style {
+            focus_style
         } else {
-            (
-                self.style,
-                self.style,
-                self.style.patch(self.invalid_style),
-                self.style.patch(self.invalid_style),
-            )
+            self.style
+        };
+        let select_style = if let Some(select_style) = self.select_style {
+            select_style
+        } else {
+            self.style.reversed()
+        };
+        let invalid_style = if let Some(invalid_style) = self.invalid_style {
+            invalid_style
+        } else {
+            Style::default().red()
+        };
+
+        let (style, select_style) = if self.focused {
+            if self.valid {
+                (focus_style, select_style)
+            } else {
+                (
+                    focus_style.patch(invalid_style),
+                    select_style.patch(invalid_style),
+                )
+            }
+        } else {
+            if self.valid {
+                (self.style, self.style)
+            } else {
+                (
+                    self.style.patch(invalid_style),
+                    self.style.patch(invalid_style),
+                )
+            }
         };
 
         let area = state.area.intersection(buf.area);
@@ -183,17 +203,9 @@ impl<'a> StatefulWidgetRef for TextInput<'a> {
             }
 
             if selection.contains(&col) {
-                if self.valid {
-                    cell.set_style(select_style);
-                } else {
-                    cell.set_style(invalid_select_style);
-                }
+                cell.set_style(select_style);
             } else {
-                if self.valid {
-                    cell.set_style(style);
-                } else {
-                    cell.set_style(invalid_style);
-                }
+                cell.set_style(style);
             }
         }
 
