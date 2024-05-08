@@ -2,6 +2,7 @@
 
 pub mod button;
 mod crossterm;
+pub mod date_input;
 pub mod events;
 pub mod input;
 pub mod masked_input;
