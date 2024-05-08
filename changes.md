@@ -1,3 +1,7 @@
+# 0.10.1
+
+Fix some docs.
+
 # 0.10.0
 
 * Move HandleEvent trait to separate crate and reexport.

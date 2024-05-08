@@ -10,7 +10,7 @@ pub use pure_rust_locales::Locale;
 
 pub use rat_event::{FocusKeys, HandleEvent, MouseOnly};
 
-/// Result value for event-handling. Used widgets in this crate.
+/// Result type for event-handling. Used by widgets in this crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     /// The given event was not handled at all.

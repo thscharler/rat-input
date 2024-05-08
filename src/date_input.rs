@@ -1,3 +1,7 @@
+//!
+//! A widget for date-input using [crate::chrono]
+//!
+
 use crate::_private::NonExhaustive;
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
 use crate::Outcome;
@@ -12,6 +16,7 @@ use std::fmt;
 use std::fmt::Debug;
 use unicode_segmentation::UnicodeSegmentation;
 
+/// Widget for dates.
 #[derive(Debug, Default)]
 pub struct DateInput<'a> {
     widget: MaskedInput<'a>,
@@ -92,6 +97,10 @@ impl<'a> StatefulWidget for DateInput<'a> {
     }
 }
 
+/// State.
+///
+/// Use `DateInputState::new(_pattern_)` to set the date pattern.
+///
 #[derive(Debug)]
 pub struct DateInputState {
     pub widget: MaskedInputState,

@@ -222,7 +222,9 @@ impl Default for ButtonState {
     }
 }
 
-/// Result value for event-handling. Used widgets in this crate.
+/// Result value for event-handling.
+///
+/// Adds `Pressed` to the general Outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonOutcome {
     /// The given event was not handled at all.
