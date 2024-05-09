@@ -126,9 +126,7 @@ impl<'a> StatefulWidget for MenuLine<'a> {
 
         state.area = area;
         state.key = self.key;
-        if let Some(selected) = state.selected {
             state.selected = min(state.selected, Some(self.menu.len() - 1));
-        }
 
         let select_style = if self.focused {
             if let Some(focus_style) = self.focus_style {
