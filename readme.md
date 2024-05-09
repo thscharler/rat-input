@@ -6,10 +6,11 @@
 
 ## Widgets for text-input based on ratatui.
 
-Eventhandling is currently crossterm only.
+These widgets are plain vanilla ratatui widgets.
 
-    In practice event-handling is calling 1 or 2 functions on the state, so this
-    should be simple to map for other systems. 
+Eventhandling is currently crossterm only.
+In practice event-handling is calling 1 or 2 functions on the state, so this
+should be easy to map to other systems. (Contributions welcome :)
 
 # [TextInput](crate::input::TextInput)
 
@@ -30,6 +31,13 @@ Text input with an input mask.
     * text: `lac_`
     * arbitrary separators between sub-fields
 * info-overlay for sub-fields without value
-* Localization with [rat-input::NumberSymbols]
+* Localization with [rat-input::NumberSymbols] based on [pure-rust-locales](pure-rust-locales)
 
 #[Button](crate::button::Button)
+
+Simple button widget.
+
+#[DateInput](crate::date_input::)
+
+Date input with format strings parsed by [chrono](chrono).
+

@@ -3,8 +3,8 @@
 //!
 
 use crate::_private::NonExhaustive;
+use crate::event::Outcome;
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
-use crate::Outcome;
 use chrono::format::{Fixed, Item, Numeric, Pad, StrftimeItems};
 use chrono::{Datelike, Days, Local, Months, NaiveDate};
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};

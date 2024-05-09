@@ -1,7 +1,42 @@
+use ratatui::prelude::Span;
+use std::cmp::min;
 use std::iter::once;
 use std::ops::Range;
 use std::time::{Duration, SystemTime};
 use unicode_segmentation::UnicodeSegmentation;
+
+/// Sum all widths.
+pub(crate) fn span_width(spans: &[Span<'_>]) -> u16 {
+    spans.iter().map(|v| v.width() as u16).sum()
+}
+
+/// Select previous.
+pub(crate) fn prev_opt(select: Option<usize>, change: usize) -> Option<usize> {
+    if let Some(select) = select {
+        Some(prev(select, change))
+    } else {
+        Some(0)
+    }
+}
+
+/// Select next.
+pub(crate) fn next_opt(selected: Option<usize>, change: usize, max: usize) -> Option<usize> {
+    if let Some(select) = selected {
+        Some(next(select, change, max))
+    } else {
+        Some(0)
+    }
+}
+
+/// Select previous.
+pub(crate) fn prev(select: usize, change: usize) -> usize {
+    select.saturating_sub(change)
+}
+
+/// Select next.
+pub(crate) fn next(select: usize, change: usize, max: usize) -> usize {
+    min(select + change, max)
+}
 
 /// Constrains the range to the visible range and shifts the result by offset.
 pub(crate) fn clamp_shift(range: Range<usize>, offset: usize, width: usize) -> Range<usize> {

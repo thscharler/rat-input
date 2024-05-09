@@ -8,12 +8,10 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
-use rat_event::{FocusKeys, HandleEvent};
-use rat_input::date_input::{DateInput, DateInputState};
-use rat_input::event::Outcome;
+use rat_input::event::{FocusKeys, HandleEvent, Outcome};
+use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Layout, Position, Rect};
-use ratatui::style::{Style, Stylize};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::Span;
 use ratatui::{Frame, Terminal};
 use std::fs;
@@ -23,10 +21,12 @@ use std::time::Duration;
 fn main() -> Result<(), anyhow::Error> {
     setup_logging()?;
 
-    let mut data = Data {};
+    let mut data = Data {
+        infotext: "".to_string(),
+    };
 
     let mut state = State {
-        input: DateInputState::new("%x")?,
+        menu: Default::default(),
     };
 
     run_ui(&mut data, &mut state)
@@ -49,10 +49,12 @@ fn setup_logging() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-struct Data {}
+struct Data {
+    pub(crate) infotext: String,
+}
 
 struct State {
-    pub(crate) input: DateInputState,
+    pub(crate) menu: MenuLineState,
 }
 
 fn run_ui(data: &mut Data, state: &mut State) -> Result<(), anyhow::Error> {
@@ -151,39 +153,48 @@ fn handle_event(
     Ok(r)
 }
 
-fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mut State) {
-    let l0 = Layout::horizontal([
-        Constraint::Length(14),
-        Constraint::Fill(1),
-        Constraint::Fill(1),
-    ])
-    .split(area);
-
+fn repaint_input(frame: &mut Frame<'_>, area: Rect, data: &mut Data, state: &mut State) {
     let l1 = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(1),
-        Constraint::Length(1),
         Constraint::Fill(1),
+        Constraint::Length(1),
     ])
-    .split(l0[0]);
+    .split(area);
 
-    let input1 = DateInput::default()
-        .focused(true)
-        .style(Style::default().black().on_green());
-    frame.render_stateful_widget(input1, l1[1], &mut state.input);
-    if let Some(Position { x, y }) = state.input.screen_cursor() {
-        frame.set_cursor(x, y);
-    }
+    let menu1 = MenuLine::new()
+        .title("Sample")
+        .add("Choose1")
+        .add("Choose2")
+        .add("Choose3")
+        .add("_Quit")
+        .focused(true);
 
-    let txt1 = Span::from(format!("{:?}", state.input.value()));
-    frame.render_widget(txt1, l1[2]);
+    frame.render_stateful_widget(menu1, l1[3], &mut state.menu);
+
+    let info = Span::from(&data.infotext);
+    frame.render_widget(info, l1[1]);
 }
 
 fn handle_input(
     event: &crossterm::event::Event,
-    _data: &mut Data,
+    data: &mut Data,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
-    let r = state.input.handle(event, FocusKeys)?;
-    Ok(r)
+    let r = HandleEvent::handle(&mut state.menu, event, FocusKeys);
+    match r {
+        MenuOutcome::Selected(v) => {
+            data.infotext = format!("Selected {}", v);
+        }
+        MenuOutcome::Activated(v) => {
+            data.infotext = format!("Activated {}", v);
+            match v {
+                3 => return Err(anyhow!("Quit")),
+                _ => {}
+            }
+        }
+        _ => {}
+    };
+
+    Ok(r.into())
 }

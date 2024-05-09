@@ -8,13 +8,11 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
-use rat_input::events::{FocusKeys, HandleEvent, Outcome};
+use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::input::{TextInput, TextInputState};
 use ratatui::backend::CrosstermBackend;
-use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Style, Stylize};
-use ratatui::widgets::StatefulWidget;
 use ratatui::{Frame, Terminal};
 use std::fs;
 use std::io::{stdout, Stdout};
@@ -170,7 +168,9 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         .focused(true)
         .style(Style::default().black().on_green());
     frame.render_stateful_widget(input1, l1[1], &mut state.input);
-    frame.set_cursor(state.input.cursor.x, state.input.cursor.y);
+    if let Some(Position { x, y }) = state.input.screen_cursor() {
+        frame.set_cursor(x, y);
+    }
 }
 
 fn handle_input(

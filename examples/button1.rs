@@ -9,7 +9,7 @@ use crossterm::terminal::{
 };
 use crossterm::ExecutableCommand;
 use rat_input::button::{Button, ButtonOutcome, ButtonState};
-use rat_input::events::{HandleEvent, MouseOnly, Outcome};
+use rat_input::event::{HandleEvent, MouseOnly, Outcome};
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
