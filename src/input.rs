@@ -8,7 +8,7 @@
 //!
 //!
 //! The visual cursor must be set separately after rendering.
-//! It is accessible as [TextInputState::visual_cursor()] or [TextInputState::cursor] after rendering.
+//! It is accessible as [TextInputState::screen_cursor()] or [TextInputState::cursor] after rendering.
 //!
 //! Event handling by calling the freestanding fn [crate::masked_input::handle_events].
 //! There's [handle_mouse_events] if you want to override the default key bindings but keep
@@ -209,8 +209,12 @@ impl<'a> StatefulWidgetRef for TextInput<'a> {
             }
         }
 
-        let cursor = state.value.cursor().saturating_sub(state.value.offset()) as u16;
-        state.cursor = Position::new(state.area.x + cursor, state.area.y);
+        if self.focused {
+            let cursor = state.value.cursor().saturating_sub(state.value.offset()) as u16;
+            state.cursor = Some(Position::new(state.area.x + cursor, state.area.y));
+        } else {
+            state.cursor = None;
+        }
     }
 }
 
@@ -219,7 +223,7 @@ impl<'a> StatefulWidgetRef for TextInput<'a> {
 pub struct TextInputState {
     /// The position of the cursor in screen coordinates.
     /// Can be directly used for [Frame::set_cursor()]
-    pub cursor: Position,
+    pub cursor: Option<Position>,
     /// Area inside a possible block.
     pub area: Rect,
     /// Mouse selection in progress.
@@ -308,7 +312,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for TextInputState
                 if self.area.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
                     let c = column - self.area.x;
-                    self.set_offset_relative_cursor(c as isize, false);
+                    self.set_visual_cursor(c as isize, false);
                     Outcome::Changed
                 } else {
                     Outcome::NotUsed
@@ -317,7 +321,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for TextInputState
             ct_event!(mouse drag Left for column, _row) => {
                 if self.mouse.do_drag() {
                     let c = (*column as isize) - (self.area.x as isize);
-                    self.set_offset_relative_cursor(c, true);
+                    self.set_visual_cursor(c, true);
                     Outcome::Changed
                 } else {
                     Outcome::NotUsed
@@ -441,7 +445,7 @@ impl TextInputState {
     }
 
     /// Set the cursor position from a visual position relative to the origin.
-    pub fn set_offset_relative_cursor(&mut self, rpos: isize, extend_selection: bool) {
+    pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) {
         let pos = if rpos < 0 {
             self.value.offset().saturating_sub(-rpos as usize)
         } else {
@@ -450,8 +454,8 @@ impl TextInputState {
         self.value.set_cursor(pos, extend_selection);
     }
 
-    /// The current text cursor as a absolute screen position.
-    pub fn visual_cursor(&self) -> Position {
+    /// The current text cursor as an absolute screen position.
+    pub fn screen_cursor(&self) -> Option<Position> {
         self.cursor
     }
 

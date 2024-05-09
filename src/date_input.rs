@@ -9,7 +9,7 @@ use chrono::format::{Fixed, Item, Numeric, Pad, StrftimeItems};
 use chrono::{Datelike, Days, Local, Months, NaiveDate};
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{StatefulWidget, Style};
 use ratatui::widgets::{Block, StatefulWidgetRef};
 use std::fmt;
@@ -277,6 +277,10 @@ impl DateInputState {
     pub fn select_all(&mut self) {
         self.widget.select_all()
     }
+
+    pub fn screen_cursor(&self) -> Option<Position> {
+        self.widget.screen_cursor()
+    }
 }
 
 /// Add convenience keys:
@@ -454,4 +458,27 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>
     ) -> Result<Outcome, fmt::Error> {
         self.widget.handle(event, MouseOnly)
     }
+}
+
+/// Handle all events.
+/// Text events are only processed if focus is true.
+/// Mouse events are processed if they are in range.
+pub fn handle_events(
+    state: &mut DateInputState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> Result<Outcome, fmt::Error> {
+    if focus {
+        HandleEvent::handle(state, event, FocusKeys)
+    } else {
+        HandleEvent::handle(state, event, MouseOnly)
+    }
+}
+
+/// Handle only mouse-events.
+pub fn handle_mouse_events(
+    state: &mut DateInputState,
+    event: &crossterm::event::Event,
+) -> Result<Outcome, fmt::Error> {
+    HandleEvent::handle(state, event, MouseOnly)
 }

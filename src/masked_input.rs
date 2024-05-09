@@ -284,7 +284,14 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
             }
         }
 
-        state.cursor = Position::new(state.area.x + state.visible_cursor(), state.area.y)
+        if self.focused {
+            state.cursor = Some(Position::new(
+                state.area.x + state.visible_cursor(),
+                state.area.y,
+            ));
+        } else {
+            state.cursor = None;
+        }
     }
 }
 
@@ -293,7 +300,7 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
 pub struct MaskedInputState {
     /// The position of the cursor in screen coordinates.
     /// Can be directly used for [Frame::set_cursor()]
-    pub cursor: Position,
+    pub cursor: Option<Position>,
     /// Area
     pub area: Rect,
     /// Mouse selection in progress.
@@ -394,7 +401,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>
                 if self.area.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
                     let c = column - self.area.x;
-                    self.set_offset_relative_cursor(c as isize, false);
+                    self.set_visual_cursor(c as isize, false);
                     Outcome::Changed
                 } else {
                     Outcome::NotUsed
@@ -403,7 +410,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>
             ct_event!(mouse drag Left for column, _row) => {
                 if self.mouse.do_drag() {
                     let c = (*column as isize) - (self.area.x as isize);
-                    self.set_offset_relative_cursor(c, true);
+                    self.set_visual_cursor(c, true);
                     Outcome::Changed
                 } else {
                     Outcome::NotUsed
@@ -628,7 +635,7 @@ impl MaskedInputState {
     }
 
     /// Set the cursor position from a visual position relative to the origin.
-    pub fn set_offset_relative_cursor(&mut self, rpos: isize, extend_selection: bool) {
+    pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) {
         let pos = if rpos < 0 {
             self.value.offset().saturating_sub(-rpos as usize)
         } else {
@@ -637,8 +644,8 @@ impl MaskedInputState {
         self.value.set_cursor(pos, extend_selection);
     }
 
-    /// The current text cursor as a absolute screen position.
-    pub fn visual_cursor(&self) -> Position {
+    /// The current text cursor as an absolute screen position.
+    pub fn screen_cursor(&self) -> Option<Position> {
         self.cursor
     }
 

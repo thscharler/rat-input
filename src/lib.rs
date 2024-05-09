@@ -8,7 +8,9 @@ pub mod util;
 
 pub use pure_rust_locales::Locale;
 
-pub use rat_event::{FocusKeys, HandleEvent, MouseOnly};
+pub mod event {
+    pub use rat_event::{FocusKeys, HandleEvent, MouseOnly};
+}
 
 /// Result type for event-handling. Used by widgets in this crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
