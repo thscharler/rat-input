@@ -6,7 +6,6 @@ use crate::_private::NonExhaustive;
 use crate::button::{Button, ButtonOutcome, ButtonState, ButtonStyle};
 use crate::event::Outcome;
 use crate::layout::layout_dialog;
-use crossterm::event::Event;
 use rat_event::{ct_event, FocusKeys, HandleEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Flex, Margin, Rect};
@@ -155,7 +154,7 @@ impl StatefulWidget for MsgDialog {
 }
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MsgDialogState {
-    fn handle(&mut self, event: &Event, _: FocusKeys) -> Outcome {
+    fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> Outcome {
         if self.active {
             let r = match self.button.handle(event, FocusKeys) {
                 ButtonOutcome::Pressed => {
