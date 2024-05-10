@@ -4,8 +4,11 @@ pub mod button;
 pub mod calendar;
 pub mod date_input;
 pub mod input;
+pub mod layout;
 pub mod masked_input;
 pub mod menuline;
+pub mod msgdialog;
+pub mod statusline;
 pub mod util;
 
 pub use pure_rust_locales::Locale;

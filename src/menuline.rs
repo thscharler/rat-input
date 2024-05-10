@@ -126,7 +126,7 @@ impl<'a> StatefulWidget for MenuLine<'a> {
 
         state.area = area;
         state.key = self.key;
-            state.selected = min(state.selected, Some(self.menu.len() - 1));
+        state.selected = min(state.selected, Some(self.menu.len() - 1));
 
         let select_style = if self.focused {
             if let Some(focus_style) = self.focus_style {
@@ -337,7 +337,7 @@ pub struct HotKeyCtrl;
 impl HandleEvent<crossterm::event::Event, HotKeyCtrl, MenuOutcome> for MenuLineState {
     fn handle(&mut self, event: &crossterm::event::Event, _: HotKeyCtrl) -> MenuOutcome {
         match event {
-            ct_event!(key press CONTROL-cc) => {
+            ct_event!(key release CONTROL-cc) => {
                 self.select_by_key(*cc);
                 match self.selected {
                     Some(a) => MenuOutcome::Activated(a),
@@ -356,7 +356,7 @@ pub struct HotKeyAlt;
 impl HandleEvent<crossterm::event::Event, HotKeyAlt, MenuOutcome> for MenuLineState {
     fn handle(&mut self, event: &crossterm::event::Event, _: HotKeyAlt) -> MenuOutcome {
         match event {
-            ct_event!(key press ALT-cc) => {
+            ct_event!(key release ALT-cc) => {
                 self.select_by_key(*cc);
                 match self.selected {
                     Some(a) => MenuOutcome::Activated(a),
@@ -371,42 +371,42 @@ impl HandleEvent<crossterm::event::Event, HotKeyAlt, MenuOutcome> for MenuLineSt
 impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineState {
     fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> MenuOutcome {
         let res = match event {
-            ct_event!(key press cc) => {
+            ct_event!(key release cc) => {
                 self.select_by_key(*cc);
                 match self.selected {
                     Some(a) => MenuOutcome::Activated(a),
                     None => MenuOutcome::NotUsed,
                 }
             }
-            ct_event!(keycode press Left) => {
+            ct_event!(keycode release Left) => {
                 self.prev();
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),
                     None => unreachable!(),
                 }
             }
-            ct_event!(keycode press Right) => {
+            ct_event!(keycode release Right) => {
                 self.next();
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),
                     None => unreachable!(),
                 }
             }
-            ct_event!(keycode press Home) => {
+            ct_event!(keycode release Home) => {
                 self.select(Some(0));
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),
                     None => unreachable!(),
                 }
             }
-            ct_event!(keycode press End) => {
+            ct_event!(keycode release End) => {
                 self.select(Some(self.len() - 1));
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),
                     None => unreachable!(),
                 }
             }
-            ct_event!(keycode press Enter) => match self.selected {
+            ct_event!(keycode release Enter) => match self.selected {
                 Some(a) => MenuOutcome::Activated(a),
                 None => MenuOutcome::NotUsed,
             },

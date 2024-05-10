@@ -8,25 +8,28 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+use rat_input::button::ButtonStyle;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
+use rat_input::msgdialog::{MsgDialog, MsgDialogState};
+use rat_input::statusline::{StatusLine, StatusLineState};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::text::Span;
+use ratatui::style::{Style, Stylize};
 use ratatui::{Frame, Terminal};
 use std::fs;
 use std::io::{stdout, Stdout};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 fn main() -> Result<(), anyhow::Error> {
     setup_logging()?;
 
-    let mut data = Data {
-        infotext: "".to_string(),
-    };
+    let mut data = Data {};
 
     let mut state = State {
         menu: Default::default(),
+        status: Default::default(),
+        msg: Default::default(),
     };
 
     run_ui(&mut data, &mut state)
@@ -49,12 +52,12 @@ fn setup_logging() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-struct Data {
-    pub(crate) infotext: String,
-}
+struct Data {}
 
 struct State {
     pub(crate) menu: MenuLineState,
+    pub(crate) status: StatusLineState,
+    pub(crate) msg: MsgDialogState,
 }
 
 fn run_ui(data: &mut Data, state: &mut State) -> Result<(), anyhow::Error> {
@@ -124,9 +127,40 @@ fn repaint_ui(
 }
 
 fn repaint_tui(frame: &mut Frame<'_>, data: &mut Data, state: &mut State) {
+    let t0 = SystemTime::now();
     let area = frame.size();
 
-    repaint_input(frame, area, data, state);
+    let l1 = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(area);
+
+    repaint_input(frame, l1[0], data, state);
+
+    let status1 = StatusLine::new()
+        .layout([
+            Constraint::Fill(1),
+            Constraint::Length(17),
+            Constraint::Length(17),
+        ])
+        .styles([
+            Style::default().black().on_dark_gray(),
+            Style::default().white().on_blue(),
+            Style::default().white().on_light_blue(),
+        ]);
+
+    if state.msg.active {
+        let msgd = MsgDialog::default()
+            .style(Style::default().white().on_blue())
+            .button_style(ButtonStyle {
+                style: Style::default().blue().on_white(),
+                ..Default::default()
+            });
+        frame.render_stateful_widget(msgd, area, &mut state.msg);
+    }
+
+    let el = t0.elapsed().unwrap_or(Duration::from_nanos(0));
+    state
+        .status
+        .status(1, format!("Render {:?}", el).to_string());
+    frame.render_stateful_widget(status1, l1[1], &mut state.status);
 }
 
 fn handle_event(
@@ -134,62 +168,76 @@ fn handle_event(
     data: &mut Data,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
-    use crossterm::event::Event;
-    match event {
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('q'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            ..
-        }) => {
-            return Err(anyhow!("quit"));
-        }
-        Event::Resize(_, _) => return Ok(Outcome::Changed),
-        _ => {}
-    }
+    let t0 = SystemTime::now();
 
-    let r = handle_input(&event, data, state)?;
+    let r = 'h: {
+        use crossterm::event::Event;
+        match event {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('q'),
+                modifiers: KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press,
+                ..
+            }) => {
+                return Err(anyhow!("quit"));
+            }
+            Event::Resize(_, _) => return Ok(Outcome::Changed),
+            _ => {}
+        }
+
+        if state.msg.active {
+            let r = state.msg.handle(&event, FocusKeys);
+            break 'h r;
+        }
+
+        let r = handle_input(&event, data, state)?;
+
+        r
+    };
+
+    let el = t0.elapsed().unwrap_or(Duration::from_nanos(0));
+    state
+        .status
+        .status(2, format!("Handle {:?}", el).to_string());
 
     Ok(r)
 }
 
 fn repaint_input(frame: &mut Frame<'_>, area: Rect, data: &mut Data, state: &mut State) {
-    let l1 = Layout::vertical([
-        Constraint::Fill(1),
-        Constraint::Length(1),
-        Constraint::Fill(1),
-        Constraint::Length(1),
-    ])
-    .split(area);
+    let l1 = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(area);
 
     let menu1 = MenuLine::new()
         .title("Sample")
         .add("Choose1")
         .add("Choose2")
         .add("Choose3")
+        .add("Message")
         .add("_Quit")
+        .title_style(Style::default().black().on_yellow())
+        .style(Style::default().black().on_dark_gray())
         .focused(true);
-
-    frame.render_stateful_widget(menu1, l1[3], &mut state.menu);
-
-    let info = Span::from(&data.infotext);
-    frame.render_widget(info, l1[1]);
+    frame.render_stateful_widget(menu1, l1[1], &mut state.menu);
 }
 
 fn handle_input(
     event: &crossterm::event::Event,
-    data: &mut Data,
+    _data: &mut Data,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r = HandleEvent::handle(&mut state.menu, event, FocusKeys);
     match r {
         MenuOutcome::Selected(v) => {
-            data.infotext = format!("Selected {}", v);
+            state.status.status(0, format!("Selected {}", v));
         }
         MenuOutcome::Activated(v) => {
-            data.infotext = format!("Activated {}", v);
+            state.status.status(0, format!("Activated {}", v));
             match v {
-                3 => return Err(anyhow!("Quit")),
+                3 => {
+                    state.msg.append("Hello world!");
+                    state.msg.active = true;
+                    return Ok(Outcome::Changed);
+                }
+                4 => return Err(anyhow!("Quit")),
                 _ => {}
             }
         }
