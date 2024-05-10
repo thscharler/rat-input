@@ -1,3 +1,10 @@
+# 0.11.0
+
+* Add calender widget `Month`
+* Add menu widget `MenuLine`
+* Add basic `MsgDialog`
+* Add widget `StatusLine`
+
 # 0.10.1
 
 Fix some docs.

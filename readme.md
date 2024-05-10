@@ -41,3 +41,14 @@ Simple button widget.
 
 Date input with format strings parsed by [chrono](chrono).
 
+#[Month](crate::calender::)
+
+Widget for calender display.
+
+#[MenuLine](crate::menuline::)
+
+Basic menu widget. Although no submenus as popup.
+
+#[StatusLine](crate::statusline::)
+
+Statusline with multiple segments.
