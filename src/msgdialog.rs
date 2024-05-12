@@ -5,7 +5,7 @@
 use crate::_private::NonExhaustive;
 use crate::button::{Button, ButtonOutcome, ButtonState, ButtonStyle};
 use crate::event::Outcome;
-use crate::layout::layout_dialog;
+use crate::layout_dialog::layout_dialog;
 use rat_event::{ct_event, FocusKeys, HandleEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Flex, Margin, Rect};

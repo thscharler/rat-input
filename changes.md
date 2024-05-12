@@ -1,3 +1,7 @@
+# 0.12.0
+
+* Add layout_edit() and layout_dialog()
+
 # 0.11.0
 
 * Add calender widget `Month`
