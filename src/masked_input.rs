@@ -801,7 +801,7 @@ pub mod core {
     }
 
     impl Debug for EditDirection {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             write!(
                 f,
                 "{}",
@@ -814,7 +814,7 @@ pub mod core {
     }
 
     impl Display for Mask {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             let s = match self {
                 Mask::Digit0(_) => "0",
                 Mask::Digit(_) => "9",
@@ -864,7 +864,7 @@ pub mod core {
     }
 
     impl Debug for Mask {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             match self {
                 Mask::Digit0(d) => {
                     write!(f, "{:?}0", d)
@@ -1257,7 +1257,7 @@ pub mod core {
     }
 
     impl Debug for MaskToken {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             write!(
                 f,
                 "Mask #{}:{}:{}-{} {:?} | {:?}",
