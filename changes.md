@@ -1,3 +1,7 @@
+# 0.13.0
+
+* Use new trait UsedEvent.
+
 # 0.12.0
 
 * Add layout_edit() and layout_dialog()

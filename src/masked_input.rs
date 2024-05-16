@@ -324,14 +324,8 @@ impl Default for MaskedInputState {
     }
 }
 
-impl HandleEvent<crossterm::event::Event, FocusKeys, Result<Outcome, fmt::Error>>
-    for MaskedInputState
-{
-    fn handle(
-        &mut self,
-        event: &crossterm::event::Event,
-        _keymap: FocusKeys,
-    ) -> Result<Outcome, fmt::Error> {
+impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MaskedInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> Outcome {
         let r = 'f: {
             match event {
                 ct_event!(keycode press Left) => self.move_to_prev(false),
@@ -359,24 +353,24 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Result<Outcome, fmt::Error>
                 ct_event!(keycode press SHIFT-Home) => self.set_cursor(0, true),
                 ct_event!(keycode press SHIFT-End) => self.set_cursor(self.len(), true),
                 ct_event!(key press CONTROL-'a') => self.set_selection(0, self.len()),
-                ct_event!(keycode press Backspace) => self.delete_prev_char()?,
-                ct_event!(keycode press Delete) => self.delete_next_char()?,
+                ct_event!(keycode press Backspace) => self.delete_prev_char(),
+                ct_event!(keycode press Delete) => self.delete_next_char(),
                 ct_event!(keycode press CONTROL-Backspace) => {
                     let prev = self.prev_word_boundary();
-                    self.remove_selection(prev..self.cursor())?;
+                    self.remove_selection(prev..self.cursor());
                 }
                 ct_event!(keycode press CONTROL-Delete) => {
                     let next = self.next_word_boundary();
-                    self.remove_selection(self.cursor()..next)?;
+                    self.remove_selection(self.cursor()..next);
                 }
                 ct_event!(key press CONTROL-'d') => self.set_value(self.default_value()),
                 ct_event!(keycode press CONTROL_SHIFT-Backspace) => {
-                    self.remove_selection(0..self.cursor())?
+                    self.remove_selection(0..self.cursor())
                 }
                 ct_event!(keycode press CONTROL_SHIFT-Delete) => {
-                    self.remove_selection(self.cursor()..self.len())?
+                    self.remove_selection(self.cursor()..self.len())
                 }
-                ct_event!(key press c) | ct_event!(key press SHIFT-c) => self.insert_char(*c)?,
+                ct_event!(key press c) | ct_event!(key press SHIFT-c) => self.insert_char(*c),
                 _ => break 'f Outcome::NotUsed,
             }
             Outcome::Changed
@@ -384,19 +378,13 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Result<Outcome, fmt::Error>
 
         match r {
             Outcome::NotUsed => HandleEvent::handle(self, event, MouseOnly),
-            v => Ok(v),
+            v => v,
         }
     }
 }
 
-impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>>
-    for MaskedInputState
-{
-    fn handle(
-        &mut self,
-        event: &crossterm::event::Event,
-        _keymap: MouseOnly,
-    ) -> Result<Outcome, fmt::Error> {
+impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> Outcome {
         let r = match event {
             ct_event!(mouse down Left for column,row) => {
                 if self.area.contains(Position::new(*column, *row)) {
@@ -424,7 +412,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>
             _ => Outcome::NotUsed,
         };
 
-        Ok(r)
+        r
     }
 }
 
@@ -435,7 +423,7 @@ pub fn handle_events(
     state: &mut MaskedInputState,
     focus: bool,
     event: &crossterm::event::Event,
-) -> Result<Outcome, fmt::Error> {
+) -> Outcome {
     if focus {
         HandleEvent::handle(state, event, FocusKeys)
     } else {
@@ -447,7 +435,7 @@ pub fn handle_events(
 pub fn handle_mouse_events(
     state: &mut MaskedInputState,
     event: &crossterm::event::Event,
-) -> Result<Outcome, fmt::Error> {
+) -> Outcome {
     HandleEvent::handle(state, event, MouseOnly)
 }
 
@@ -683,43 +671,40 @@ impl MaskedInputState {
     }
 
     /// Insert a char at the current position.
-    pub fn insert_char(&mut self, c: char) -> Result<(), fmt::Error> {
+    pub fn insert_char(&mut self, c: char) {
         if self.value.has_selection() {
-            self.value.remove_selection(self.value.selection())?;
+            self.value.remove_selection(self.value.selection());
         }
         self.value.advance_cursor(c);
-        self.value.insert_char(c)?;
-        Ok(())
+        self.value.insert_char(c);
     }
 
     /// Remove the selected range. The text will be replaced with the default value
     /// as defined by the mask.
-    pub fn remove_selection(&mut self, selection: Range<usize>) -> Result<(), fmt::Error> {
-        self.value.remove_selection(selection)
+    pub fn remove_selection(&mut self, selection: Range<usize>) {
+        self.value.remove_selection(selection);
     }
 
     /// Delete the char before the cursor.
-    pub fn delete_prev_char(&mut self) -> Result<(), fmt::Error> {
+    pub fn delete_prev_char(&mut self) {
         if self.value.is_select_all() {
             self.value.reset();
         } else if self.value.has_selection() {
-            self.value.remove_selection(self.value.selection())?;
+            self.value.remove_selection(self.value.selection());
         } else if self.value.cursor() > 0 {
-            self.value.remove_prev()?;
+            self.value.remove_prev();
         }
-        Ok(())
     }
 
     /// Delete the char after the cursor.
-    pub fn delete_next_char(&mut self) -> Result<(), fmt::Error> {
+    pub fn delete_next_char(&mut self) {
         if self.value.is_select_all() {
             self.value.reset();
         } else if self.value.has_selection() {
-            self.value.remove_selection(self.value.selection())?;
+            self.value.remove_selection(self.value.selection());
         } else if self.value.cursor() < self.value.len() {
-            self.value.remove_next()?;
+            self.value.remove_next();
         }
-        Ok(())
     }
 
     /// Visible cursor position.
@@ -1286,7 +1271,7 @@ pub mod core {
             buf
         }
 
-        fn remap_number(submask: &[MaskToken], v: &str) -> Result<String, fmt::Error> {
+        fn remap_number(submask: &[MaskToken], v: &str) -> String {
             // to be safe, always use our internal symbol set.
             let sym = NumberSymbols {
                 decimal_sep: '.',
@@ -1327,15 +1312,15 @@ pub mod core {
 
             let fmt = match NumberFormat::news(tok, sym) {
                 Ok(v) => v,
-                Err(_) => return Err(fmt::Error),
+                Err(_) => unreachable!("invalid mask"),
             };
             let mut out = String::new();
             match number::core::map_num::<_, false>(clean.as_str(), &fmt, fmt.sym(), &mut out) {
                 Ok(_) => {}
-                Err(_) => return Err(fmt::Error),
+                Err(_) => unreachable!("invalid mask"),
             }
 
-            Ok(out)
+            out
         }
     }
 
@@ -2180,7 +2165,7 @@ pub mod core {
         /// `advance_cursor()` must be called before for correct functionality.
         ///
         /// Otherwise: your mileage might vary.
-        pub fn insert_char(&mut self, c: char) -> Result<(), fmt::Error> {
+        pub fn insert_char(&mut self, c: char) {
             // let mask = &self.mask[self.cursor];
             // debug!("// INSERT CHAR {:?} {:?}", mask, c);
             // debug!("#[rustfmt::skip]");
@@ -2191,8 +2176,8 @@ pub mod core {
             {
                 let mask = &self.mask[self.cursor];
                 if mask.right.is_number() && self.can_edit_sign(mask, c) {
-                    if self.insert_sign(c)? {
-                        return Ok(());
+                    if self.insert_sign(c) {
+                        return;
                     }
                 }
             }
@@ -2201,8 +2186,8 @@ pub mod core {
                 if mask.peek_left.is_number() && (mask.right.is_ltor() || mask.right.is_none()) {
                     let left = &self.mask[self.cursor - 1];
                     if self.can_edit_sign(left, c) {
-                        if self.insert_sign(c)? {
-                            return Ok(());
+                        if self.insert_sign(c) {
+                            return;
                         }
                     }
                 }
@@ -2210,24 +2195,24 @@ pub mod core {
             {
                 let mask = &self.mask[self.cursor];
                 if mask.right.is_rtol() {
-                    if self.insert_rtol(c)? {
-                        return Ok(());
+                    if self.insert_rtol(c) {
+                        return;
                     }
                 }
             }
             {
                 let mask = &self.mask[self.cursor];
                 if mask.peek_left.is_rtol() && (mask.right.is_ltor() || mask.right.is_none()) {
-                    if self.insert_rtol(c)? {
-                        return Ok(());
+                    if self.insert_rtol(c) {
+                        return;
                     }
                 }
             }
             {
                 let mask = &self.mask[self.cursor];
                 if mask.right.is_ltor() {
-                    if self.insert_ltor(c)? {
-                        return Ok(());
+                    if self.insert_ltor(c) {
+                        return;
                     }
                 }
             }
@@ -2235,12 +2220,10 @@ pub mod core {
             // debug!("#[rustfmt::skip]");
             // debug!("let a = {};", test_state(self));
             // debug!("assert_eq_core(&b,&a);");
-
-            Ok(())
         }
 
         /// Insert c into a ltor section.
-        fn insert_ltor(&mut self, c: char) -> Result<bool, fmt::Error> {
+        fn insert_ltor(&mut self, c: char) -> bool {
             let mask = &self.mask[self.cursor];
             let mask9 = &self.mask[mask.sec_end - 1];
             let (b, c0, c1, a) = util::split_mask(&self.value, self.cursor, mask.range());
@@ -2258,7 +2241,7 @@ pub mod core {
                 self.cursor += 1;
                 self.anchor = self.cursor;
 
-                return Ok(true);
+                return true;
             }
             if mask9.right.can_drop_last(c1) && self.is_valid_c(&mask.right, c) {
                 let mut buf = String::new();
@@ -2273,14 +2256,14 @@ pub mod core {
                 self.cursor += 1;
                 self.anchor = self.cursor;
 
-                return Ok(true);
+                return true;
             }
 
-            Ok(false)
+            false
         }
 
         /// Insert c into a rtol section
-        fn insert_rtol(&mut self, c: char) -> Result<bool, fmt::Error> {
+        fn insert_rtol(&mut self, c: char) -> bool {
             let mut mask = &self.mask[self.cursor];
             // boundary right/left. prefer right, change mask.
             if mask.peek_left.is_rtol() && (mask.right.is_ltor() || mask.right.is_none()) {
@@ -2296,7 +2279,7 @@ pub mod core {
                 mstr.push_str(c1);
 
                 let submask = &self.mask[mask.sec_start..mask.sec_end];
-                let mmstr = MaskToken::remap_number(submask, &mstr)?;
+                let mmstr = MaskToken::remap_number(submask, &mstr);
 
                 let mut buf = String::new();
                 buf.push_str(b);
@@ -2306,15 +2289,15 @@ pub mod core {
                 self.value = buf;
                 // cursor stays
 
-                return Ok(true);
+                return true;
             }
 
-            Ok(false)
+            false
         }
 
         /// Insert a sign c into the current number section
         #[allow(clippy::single_match)]
-        fn insert_sign(&mut self, c: char) -> Result<bool, fmt::Error> {
+        fn insert_sign(&mut self, c: char) -> bool {
             let mut mask = &self.mask[self.cursor];
             // boundary right/left. prefer right, change mask.
             if mask.peek_left.is_number() && (mask.right.is_ltor() || mask.right.is_none()) {
@@ -2349,7 +2332,7 @@ pub mod core {
                     debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
                     self.value = buf;
                     // note: probably no remap necessary?
-                    return Ok(true);
+                    return true;
                 } else if matches!(
                     &self.mask[i],
                     MaskToken {
@@ -2378,7 +2361,7 @@ pub mod core {
                     debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
                     self.value = buf;
                     // note: probably no remap necessary?
-                    return Ok(true);
+                    return true;
                 }
             } // else
               // find "-" sign at a moving position.
@@ -2393,7 +2376,7 @@ pub mod core {
                 debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
                 self.value = buf;
                 // note: probably no remap necessary?
-                return Ok(true);
+                return true;
             }
             // else
             // insert a fresh "-" somewhere
@@ -2415,7 +2398,7 @@ pub mod core {
                             mstr.push_str(c0);
                             mstr.push('-');
                             mstr.push_str(util::drop_first(c1));
-                            let mmstr = MaskToken::remap_number(submask, &mstr)?;
+                            let mmstr = MaskToken::remap_number(submask, &mstr);
 
                             let mut buf = String::new();
                             buf.push_str(b);
@@ -2425,15 +2408,15 @@ pub mod core {
                             self.value = buf;
                         };
 
-                        return Ok(true);
+                        return true;
                     }
                 }
             }
-            Ok(false)
+            false
         }
 
         /// Remove the selection.
-        pub fn remove_selection(&mut self, selection: Range<usize>) -> Result<(), fmt::Error> {
+        pub fn remove_selection(&mut self, selection: Range<usize>) {
             let mut buf = String::new();
 
             let mut mask = &self.mask[selection.start];
@@ -2462,7 +2445,7 @@ pub mod core {
                     mstr.push_str(c1);
 
                     let mmstr =
-                        MaskToken::remap_number(&self.mask[mask.sec_start..mask.sec_end], &mstr)?;
+                        MaskToken::remap_number(&self.mask[mask.sec_start..mask.sec_end], &mstr);
 
                     buf.push_str(&mmstr);
                 } else if mask.right.is_ltor() {
@@ -2497,14 +2480,12 @@ pub mod core {
             // debug!("#[rustfmt::skip]");
             // debug!("let a = {};", test_state(self));
             // debug!("assert_eq_core(&b,&a);");
-
-            Ok(())
         }
 
         /// Remove the previous char.
-        pub fn remove_prev(&mut self) -> Result<(), fmt::Error> {
+        pub fn remove_prev(&mut self) {
             if self.cursor == 0 {
-                return Ok(());
+                return;
             }
 
             let left = &self.mask[self.cursor - 1];
@@ -2528,7 +2509,7 @@ pub mod core {
                 mstr.push_str(c0);
                 mstr.push_str(c1);
                 let mmstr =
-                    MaskToken::remap_number(&self.mask[left.sec_start..left.sec_end], &mstr)?;
+                    MaskToken::remap_number(&self.mask[left.sec_start..left.sec_end], &mstr);
 
                 let mut buf = String::new();
                 buf.push_str(b);
@@ -2574,14 +2555,12 @@ pub mod core {
             // debug!("#[rustfmt::skip]");
             // debug!("let a = {};", test_state(self));
             // debug!("assert_eq_core(&b,&a);");
-
-            Ok(())
         }
 
         /// Remove the next char.
-        pub fn remove_next(&mut self) -> Result<(), fmt::Error> {
+        pub fn remove_next(&mut self) {
             if self.cursor == self.mask.len() - 1 {
-                return Ok(());
+                return;
             }
 
             let right = &self.mask[self.cursor];
@@ -2605,7 +2584,7 @@ pub mod core {
                 mstr.push_str(c0);
                 mstr.push_str(c1);
                 let mmstr =
-                    MaskToken::remap_number(&self.mask[right.sec_start..right.sec_end], &mstr)?;
+                    MaskToken::remap_number(&self.mask[right.sec_start..right.sec_end], &mstr);
 
                 let mut buf = String::new();
                 buf.push_str(b);
@@ -2651,8 +2630,6 @@ pub mod core {
             // debug!("#[rustfmt::skip]");
             // debug!("let a = {};", test_state(self));
             // debug!("assert_eq_core(&b,&a);");
-
-            Ok(())
         }
     }
 

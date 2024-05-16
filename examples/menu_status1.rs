@@ -203,7 +203,7 @@ fn handle_event(
     Ok(r)
 }
 
-fn repaint_input(frame: &mut Frame<'_>, area: Rect, data: &mut Data, state: &mut State) {
+fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mut State) {
     let l1 = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(area);
 
     let menu1 = MenuLine::new()

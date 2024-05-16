@@ -4,7 +4,7 @@
 
 use crate::_private::NonExhaustive;
 use crate::event::Outcome;
-use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
+use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::prelude::{BlockExt, Span, StatefulWidget};
@@ -235,6 +235,12 @@ pub enum ButtonOutcome {
     Changed,
     /// Button has been pressed.
     Pressed,
+}
+
+impl UsedEvent for ButtonOutcome {
+    fn used_event(&self) -> bool {
+        *self != ButtonOutcome::NotUsed
+    }
 }
 
 impl From<ButtonOutcome> for Outcome {

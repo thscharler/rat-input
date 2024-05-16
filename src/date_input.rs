@@ -300,14 +300,8 @@ impl DateInputState {
 #[derive(Debug)]
 pub struct ConvenientKeys;
 
-impl HandleEvent<crossterm::event::Event, ConvenientKeys, Result<Outcome, fmt::Error>>
-    for DateInputState
-{
-    fn handle(
-        &mut self,
-        event: &crossterm::event::Event,
-        _keymap: ConvenientKeys,
-    ) -> Result<Outcome, fmt::Error> {
+impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: ConvenientKeys) -> Outcome {
         let r = {
             match event {
                 ct_event!(key press 'h') => {
@@ -431,31 +425,19 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Result<Outcome, fmt::E
         if r == Outcome::NotUsed {
             self.handle(event, FocusKeys)
         } else {
-            Ok(r)
+            r
         }
     }
 }
 
-impl HandleEvent<crossterm::event::Event, FocusKeys, Result<Outcome, fmt::Error>>
-    for DateInputState
-{
-    fn handle(
-        &mut self,
-        event: &crossterm::event::Event,
-        _keymap: FocusKeys,
-    ) -> Result<Outcome, fmt::Error> {
+impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for DateInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> Outcome {
         self.widget.handle(event, FocusKeys)
     }
 }
 
-impl HandleEvent<crossterm::event::Event, MouseOnly, Result<Outcome, fmt::Error>>
-    for DateInputState
-{
-    fn handle(
-        &mut self,
-        event: &crossterm::event::Event,
-        _keymap: MouseOnly,
-    ) -> Result<Outcome, fmt::Error> {
+impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for DateInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> Outcome {
         self.widget.handle(event, MouseOnly)
     }
 }
@@ -467,7 +449,7 @@ pub fn handle_events(
     state: &mut DateInputState,
     focus: bool,
     event: &crossterm::event::Event,
-) -> Result<Outcome, fmt::Error> {
+) -> Outcome {
     if focus {
         HandleEvent::handle(state, event, FocusKeys)
     } else {
@@ -476,9 +458,6 @@ pub fn handle_events(
 }
 
 /// Handle only mouse-events.
-pub fn handle_mouse_events(
-    state: &mut DateInputState,
-    event: &crossterm::event::Event,
-) -> Result<Outcome, fmt::Error> {
+pub fn handle_mouse_events(state: &mut DateInputState, event: &crossterm::event::Event) -> Outcome {
     HandleEvent::handle(state, event, MouseOnly)
 }

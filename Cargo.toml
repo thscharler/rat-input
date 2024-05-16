@@ -1,6 +1,6 @@
 [package]
 name = "rat-input"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 description = "ratatui text input widgets"
 license = "MIT/Apache-2.0"
@@ -53,7 +53,7 @@ pure-rust-locales = "0.8"
 memchr = "2.7.2"
 format_num_pattern = "0.9"
 log = "0.4"
-rat-event = "0.10"
+rat-event = "0.12"
 
 [dev-dependencies]
 fern = "0.6"

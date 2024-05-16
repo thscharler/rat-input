@@ -146,7 +146,7 @@ fn handle_event(
         _ => {}
     }
 
-    let r = handle_input(&event, data, state)?;
+    let r = handle_input(&event, data, state);
 
     Ok(r)
 }
@@ -179,11 +179,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
     frame.render_widget(txt1, l1[2]);
 }
 
-fn handle_input(
-    event: &crossterm::event::Event,
-    _data: &mut Data,
-    state: &mut State,
-) -> Result<Outcome, anyhow::Error> {
-    let r = state.input.handle(event, FocusKeys)?;
-    Ok(r)
+fn handle_input(event: &crossterm::event::Event, _data: &mut Data, state: &mut State) -> Outcome {
+    let r = state.input.handle(event, FocusKeys);
+    r
 }

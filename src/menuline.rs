@@ -9,7 +9,7 @@ use crate::_private::NonExhaustive;
 use crate::event::Outcome;
 use crate::util::MouseFlags;
 use crate::util::{next_opt, prev_opt, span_width};
-use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
+use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{Modifier, Span, Style, Widget};
@@ -316,6 +316,12 @@ pub enum MenuOutcome {
     Selected(usize),
     /// The menuitem was selected and activated.
     Activated(usize),
+}
+
+impl UsedEvent for MenuOutcome {
+    fn used_event(&self) -> bool {
+        *self != MenuOutcome::NotUsed
+    }
 }
 
 impl From<MenuOutcome> for Outcome {

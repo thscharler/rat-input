@@ -15,6 +15,7 @@ pub mod util;
 pub use pure_rust_locales::Locale;
 
 pub mod event {
+    use rat_event::UsedEvent;
     pub use rat_event::{FocusKeys, HandleEvent, MouseOnly};
 
     /// Result type for event-handling. Used by widgets in this crate.
@@ -26,6 +27,12 @@ pub mod event {
         Unchanged,
         /// The event was handled, repaint necessary.
         Changed,
+    }
+
+    impl UsedEvent for Outcome {
+        fn used_event(&self) -> bool {
+            *self != Outcome::NotUsed
+        }
     }
 }
 
