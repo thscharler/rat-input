@@ -87,7 +87,7 @@ use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Text input widget with input mask.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MaskedInput<'a> {
     show_compact: bool,
     block: Option<Block<'a>>,
@@ -100,7 +100,7 @@ pub struct MaskedInput<'a> {
 }
 
 /// Combined style.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MaskedInputStyle {
     pub style: Style,
     pub focus: Option<Style>,

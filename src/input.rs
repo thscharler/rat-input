@@ -29,7 +29,7 @@ use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Text input widget.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TextInput<'a> {
     block: Option<Block<'a>>,
     style: Style,
@@ -41,7 +41,7 @@ pub struct TextInput<'a> {
 }
 
 /// Combined style for the widget.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TextInputStyle {
     pub style: Style,
     pub focus: Option<Style>,

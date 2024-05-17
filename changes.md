@@ -1,3 +1,7 @@
+# 0.13.1
+
+* Add missing Clone, Debug, Default.
+
 # 0.13.0
 
 * Use new trait UsedEvent.

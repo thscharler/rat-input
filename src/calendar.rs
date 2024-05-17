@@ -34,7 +34,7 @@ pub struct MonthStyle {
 }
 
 /// Month state.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct MonthState {
     pub area: Rect,
     pub area_month: Rect,

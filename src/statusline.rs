@@ -12,14 +12,14 @@ use std::fmt::Debug;
 
 /// Basic status line.
 ///
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct StatusLine {
     style: Vec<Style>,
     widths: Vec<Constraint>,
 }
 
 /// State for the status line.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StatusLineState {
     pub area: Rect,
     pub status: Vec<String>,

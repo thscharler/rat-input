@@ -15,14 +15,14 @@ use ratatui::widgets::{Block, Paragraph, Widget};
 use std::fmt::Debug;
 
 /// Basic status dialog for longer messages.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MsgDialog {
     style: Style,
     button_style: ButtonStyle,
 }
 
 /// Combined style.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MsgDialogStyle {
     pub style: Style,
     pub button: ButtonStyle,
@@ -30,7 +30,7 @@ pub struct MsgDialogStyle {
 }
 
 /// State for the status dialog.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MsgDialogState {
     // Dialog is active.
     pub active: bool,

@@ -20,7 +20,7 @@ use std::cmp::min;
 use std::fmt::Debug;
 
 /// Menu
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MenuLine<'a> {
     style: Style,
     title_style: Option<Style>,
@@ -33,7 +33,7 @@ pub struct MenuLine<'a> {
 }
 
 /// Combined styles.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MenuStyle {
     pub style: Style,
     pub title: Option<Style>,
@@ -233,7 +233,7 @@ impl Default for MenuStyle {
 }
 
 /// State for the menu.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MenuLineState {
     /// Focus
     pub area: Rect,

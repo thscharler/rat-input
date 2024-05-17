@@ -17,7 +17,7 @@ use std::fmt::Debug;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Widget for dates.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DateInput<'a> {
     widget: MaskedInput<'a>,
 }

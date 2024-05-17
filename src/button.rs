@@ -13,7 +13,7 @@ use ratatui::text::{Line, Text};
 use ratatui::widgets::{Block, StatefulWidgetRef, WidgetRef};
 
 /// Button widget.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Button<'a> {
     text: Text<'a>,
     style: Style,
@@ -24,7 +24,7 @@ pub struct Button<'a> {
 }
 
 /// Composite style.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ButtonStyle {
     pub style: Style,
     pub focus: Option<Style>,
@@ -201,7 +201,7 @@ impl<'a> StatefulWidgetRef for Button<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ButtonState {
     pub area: Rect,
     pub inner_area: Rect,
