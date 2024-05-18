@@ -1,3 +1,7 @@
+# 0.13.2
+
+* Use rat-event::Outcome
+
 # 0.13.1
 
 * Add missing Clone, Debug, Default.
