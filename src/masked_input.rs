@@ -390,8 +390,11 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputSta
                 if self.area.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
                     let c = column - self.area.x;
-                    self.set_visual_cursor(c as isize, false);
-                    Outcome::Changed
+                    if self.set_visual_cursor(c as isize, false) {
+                        Outcome::Changed
+                    } else {
+                        Outcome::Unchanged
+                    }
                 } else {
                     Outcome::NotUsed
                 }
@@ -399,8 +402,11 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputSta
             ct_event!(mouse drag Left for column, _row) => {
                 if self.mouse.do_drag() {
                     let c = (*column as isize) - (self.area.x as isize);
-                    self.set_visual_cursor(c, true);
-                    Outcome::Changed
+                    if self.set_visual_cursor(c, true) {
+                        Outcome::Changed
+                    } else {
+                        Outcome::Unchanged
+                    }
                 } else {
                     Outcome::NotUsed
                 }
@@ -624,13 +630,19 @@ impl MaskedInputState {
     }
 
     /// Set the cursor position from a visual position relative to the origin.
-    pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) {
+    pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
         let pos = if rpos < 0 {
             self.value.offset().saturating_sub(-rpos as usize)
         } else {
             self.value.offset() + rpos as usize
         };
+
+        let old_cursor = self.value.cursor();
+        let old_anchor = self.value.anchor();
+
         self.value.set_cursor(pos, extend_selection);
+
+        old_cursor != self.value.cursor() || old_anchor != self.value.anchor()
     }
 
     /// The current text cursor as an absolute screen position.

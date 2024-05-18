@@ -1,3 +1,8 @@
+# 0.13.3
+
+* Add optimization when dragging the cursor to select text.
+  Only return Changed if the selection changed.
+
 # 0.13.2
 
 * Use rat-event::Outcome
