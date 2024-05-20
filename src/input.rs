@@ -22,9 +22,9 @@ use crate::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
-use ratatui::prelude::{BlockExt, StatefulWidget};
+use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
-use ratatui::widgets::{Block, StatefulWidgetRef, WidgetRef};
+use ratatui::widgets::{Block, StatefulWidget, WidgetRef};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -47,6 +47,22 @@ pub struct TextInputStyle {
     pub focus: Option<Style>,
     pub select: Option<Style>,
     pub invalid: Option<Style>,
+    pub non_exhaustive: NonExhaustive,
+}
+
+/// Input state data.
+#[derive(Debug, Clone)]
+pub struct TextInputState {
+    /// The position of the cursor in screen coordinates.
+    /// Can be directly used for [Frame::set_cursor()]
+    pub cursor: Option<Position>,
+    /// Area inside a possible block.
+    pub area: Rect,
+    /// Mouse selection in progress.
+    pub mouse: MouseFlags,
+    /// Editing core
+    pub value: core::InputCore,
+    /// Construct with `..Default::default()`
     pub non_exhaustive: NonExhaustive,
 }
 
@@ -77,7 +93,13 @@ impl Default for TextInputStyle {
 }
 
 impl<'a> TextInput<'a> {
+    /// New widget.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Set the combined style.
+    #[inline]
     pub fn styles(mut self, style: TextInputStyle) -> Self {
         self.style = style.style;
         self.focus_style = style.focus;
@@ -87,18 +109,21 @@ impl<'a> TextInput<'a> {
     }
 
     /// Base text style.
+    #[inline]
     pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.style = style.into();
         self
     }
 
     /// Style when focused.
+    #[inline]
     pub fn focus_style(mut self, style: impl Into<Style>) -> Self {
         self.focus_style = Some(style.into());
         self
     }
 
     /// Style for selection
+    #[inline]
     pub fn select_style(mut self, style: impl Into<Style>) -> Self {
         self.select_style = Some(style.into());
         self
@@ -106,11 +131,13 @@ impl<'a> TextInput<'a> {
 
     /// Style for the invalid indicator.
     /// This is patched onto either base_style or focus_style
+    #[inline]
     pub fn invalid_style(mut self, style: impl Into<Style>) -> Self {
         self.invalid_style = Some(style.into());
         self
     }
 
+    #[inline]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
         self
@@ -120,6 +147,7 @@ impl<'a> TextInput<'a> {
     ///
     /// * Selection is only shown if focused.
     ///
+    #[inline]
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
@@ -127,6 +155,7 @@ impl<'a> TextInput<'a> {
 
     /// Renders the content differently if invalid.
     /// Uses the invalid style instead of the base style for rendering.
+    #[inline]
     pub fn valid(mut self, valid: bool) -> Self {
         self.valid = valid;
         self
@@ -137,14 +166,6 @@ impl<'a> StatefulWidget for TextInput<'a> {
     type State = TextInputState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        StatefulWidgetRef::render_ref(&self, area, buf, state);
-    }
-}
-
-impl<'a> StatefulWidgetRef for TextInput<'a> {
-    type State = TextInputState;
-
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         state.area = self.block.inner_if_some(area);
         state.value.set_width(state.area.width as usize);
 
@@ -217,22 +238,6 @@ impl<'a> StatefulWidgetRef for TextInput<'a> {
             state.cursor = None;
         }
     }
-}
-
-/// Input state data.
-#[derive(Debug, Clone)]
-pub struct TextInputState {
-    /// The position of the cursor in screen coordinates.
-    /// Can be directly used for [Frame::set_cursor()]
-    pub cursor: Option<Position>,
-    /// Area inside a possible block.
-    pub area: Rect,
-    /// Mouse selection in progress.
-    pub mouse: MouseFlags,
-    /// Editing core
-    pub value: core::InputCore,
-    /// Construct with `..Default::default()`
-    pub non_exhaustive: NonExhaustive,
 }
 
 impl Default for TextInputState {
@@ -365,93 +370,111 @@ pub fn handle_mouse_events(state: &mut TextInputState, event: &crossterm::event:
 
 impl TextInputState {
     /// Reset to empty.
+    #[inline]
     pub fn reset(&mut self) {
         self.value.clear();
     }
 
     /// Offset shown.
+    #[inline]
     pub fn offset(&self) -> usize {
         self.value.offset()
     }
 
     /// Offset shown. This is corrected if the cursor wouldn't be visible.
+    #[inline]
     pub fn set_offset(&mut self, offset: usize) {
         self.value.set_offset(offset);
     }
 
     /// Set the cursor position, reset selection.
+    #[inline]
     pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) {
         self.value.set_cursor(cursor, extend_selection);
     }
 
     /// Cursor position.
+    #[inline]
     pub fn cursor(&self) -> usize {
         self.value.cursor()
     }
 
     /// Set text.
+    #[inline]
     pub fn set_value<S: Into<String>>(&mut self, s: S) {
         self.value.set_value(s);
     }
 
     /// Text.
+    #[inline]
     pub fn value(&self) -> &str {
         self.value.value()
     }
 
     /// Text
+    #[inline]
     pub fn as_str(&self) -> &str {
         self.value.as_str()
     }
 
     /// Empty.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.value.is_empty()
     }
 
     /// Text length as grapheme count.
+    #[inline]
     pub fn len(&self) -> usize {
         self.value.len()
     }
 
     /// Selection.
+    #[inline]
     pub fn has_selection(&self) -> bool {
         self.value.has_selection()
     }
 
     /// Selection.
+    #[inline]
     pub fn set_selection(&mut self, anchor: usize, cursor: usize) {
         self.value.set_cursor(anchor, false);
         self.value.set_cursor(cursor, true);
     }
 
     /// Selection.
+    #[inline]
     pub fn select_all(&mut self) {
         self.value.set_cursor(0, false);
         self.value.set_cursor(self.value.len(), true);
     }
 
     /// Selection.
+    #[inline]
     pub fn selection(&self) -> Range<usize> {
         self.value.selection()
     }
 
     /// Selection.
+    #[inline]
     pub fn selection_str(&self) -> &str {
         util::split3(self.value.as_str(), self.value.selection()).1
     }
 
     /// Previous word boundary
+    #[inline]
     pub fn prev_word_boundary(&self) -> usize {
         self.value.prev_word_boundary()
     }
 
     /// Next word boundary
+    #[inline]
     pub fn next_word_boundary(&self) -> usize {
         self.value.next_word_boundary()
     }
 
     /// Set the cursor position from a visual position relative to the origin.
+    #[inline]
     pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
         let pos = if rpos < 0 {
             self.value.offset().saturating_sub(-rpos as usize)
@@ -468,11 +491,13 @@ impl TextInputState {
     }
 
     /// The current text cursor as an absolute screen position.
+    #[inline]
     pub fn screen_cursor(&self) -> Option<Position> {
         self.cursor
     }
 
     /// Move to the next char.
+    #[inline]
     pub fn move_to_next(&mut self, extend_selection: bool) {
         if !extend_selection && self.value.has_selection() {
             let c = self.value.selection().end;
@@ -484,6 +509,7 @@ impl TextInputState {
     }
 
     /// Move to the previous char.
+    #[inline]
     pub fn move_to_prev(&mut self, extend_selection: bool) {
         if !extend_selection && self.value.has_selection() {
             let c = self.value.selection().start;
@@ -495,16 +521,19 @@ impl TextInputState {
     }
 
     /// Insert a char a the current position.
+    #[inline]
     pub fn insert_char(&mut self, c: char) {
         self.value.insert_char(c);
     }
 
     /// Replace the given range with a new string.
+    #[inline]
     pub fn replace(&mut self, range: Range<usize>, new: &str) {
         self.value.replace(range, new);
     }
 
     /// Delete the char before the cursor.
+    #[inline]
     pub fn delete_prev_char(&mut self) {
         if self.value.has_selection() {
             self.value.replace(self.value.selection(), "");
@@ -516,6 +545,7 @@ impl TextInputState {
     }
 
     /// Delete the char after the cursor.
+    #[inline]
     pub fn delete_next_char(&mut self) {
         if self.value.has_selection() {
             self.value.replace(self.value.selection(), "");
@@ -541,13 +571,17 @@ pub mod core {
         // Len in grapheme count.
         len: usize,
 
+        // display information
         offset: usize,
         width: usize,
 
+        // cursor and selection
         cursor: usize,
         anchor: usize,
 
+        // tmp string for inserting a char.
         char_buf: String,
+        // tmp string for editing.
         buf: String,
     }
 

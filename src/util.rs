@@ -1,4 +1,4 @@
-use ratatui::prelude::Span;
+use ratatui::text::Span;
 use std::cmp::min;
 use std::iter::once;
 use std::ops::Range;

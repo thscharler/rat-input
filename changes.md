@@ -1,3 +1,7 @@
+# 0.14.0
+
+* Remove StatefulWidgetRef
+
 # 0.13.3
 
 * Add optimization when dragging the cursor to select text.

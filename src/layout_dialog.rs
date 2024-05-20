@@ -10,6 +10,7 @@ pub struct LayoutDialog<const N: usize> {
 }
 
 impl<const N: usize> LayoutDialog<N> {
+    /// Area for the buttons.
     pub fn button(&self, n: usize) -> Rect {
         self.buttons[n]
     }

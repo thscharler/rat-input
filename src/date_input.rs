@@ -10,8 +10,8 @@ use chrono::{Datelike, Days, Local, Months, NaiveDate};
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
-use ratatui::prelude::{StatefulWidget, Style};
-use ratatui::widgets::{Block, StatefulWidgetRef};
+use ratatui::style::Style;
+use ratatui::widgets::{Block, StatefulWidget};
 use std::fmt;
 use std::fmt::Debug;
 use unicode_segmentation::UnicodeSegmentation;
@@ -22,43 +22,70 @@ pub struct DateInput<'a> {
     widget: MaskedInput<'a>,
 }
 
+/// State.
+///
+/// Use `DateInputState::new(_pattern_)` to set the date pattern.
+///
+#[derive(Debug, Clone)]
+pub struct DateInputState {
+    /// uses MaskedInputState for the actual functionality.
+    pub widget: MaskedInputState,
+    /// The chrono format pattern.
+    pattern: String,
+    /// Locale
+    locale: chrono::Locale,
+
+    pub non_exhaustive: NonExhaustive,
+}
+
 impl<'a> DateInput<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Show the compact form, if the focus is not with this widget.
+    #[inline]
     pub fn show_compact(mut self, show_compact: bool) -> Self {
         self.widget = self.widget.show_compact(show_compact);
         self
     }
 
     /// Set the combined style.
+    #[inline]
     pub fn styles(mut self, style: MaskedInputStyle) -> Self {
         self.widget = self.widget.styles(style);
         self
     }
 
     /// Base text style.
+    #[inline]
     pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.widget = self.widget.style(style);
         self
     }
 
     /// Style when focused.
+    #[inline]
     pub fn focus_style(mut self, style: impl Into<Style>) -> Self {
         self.widget = self.widget.focus_style(style);
         self
     }
 
     /// Style for selection
+    #[inline]
     pub fn select_style(mut self, style: impl Into<Style>) -> Self {
         self.widget = self.widget.select_style(style);
         self
     }
 
     /// Style for the invalid indicator.
+    #[inline]
     pub fn invalid_style(mut self, style: impl Into<Style>) -> Self {
         self.widget = self.widget.invalid_style(style);
         self
     }
 
+    #[inline]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.widget = self.widget.block(block);
         self
@@ -68,6 +95,7 @@ impl<'a> DateInput<'a> {
     ///
     /// * Selection is only shown if focused.
     ///
+    #[inline]
     pub fn focused(mut self, focused: bool) -> Self {
         self.widget = self.widget.focused(focused);
         self
@@ -75,17 +103,10 @@ impl<'a> DateInput<'a> {
 
     /// Renders the content differently if invalid.
     /// Uses the invalid style instead of the base style for rendering.
+    #[inline]
     pub fn valid(mut self, valid: bool) -> Self {
         self.widget = self.widget.valid(valid);
         self
-    }
-}
-
-impl<'a> StatefulWidgetRef for DateInput<'a> {
-    type State = DateInputState;
-
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.widget.render_ref(area, buf, &mut state.widget);
     }
 }
 
@@ -95,19 +116,6 @@ impl<'a> StatefulWidget for DateInput<'a> {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         self.widget.render(area, buf, &mut state.widget);
     }
-}
-
-/// State.
-///
-/// Use `DateInputState::new(_pattern_)` to set the date pattern.
-///
-#[derive(Debug)]
-pub struct DateInputState {
-    pub widget: MaskedInputState,
-    pub pattern: String,
-    pub locale: chrono::Locale,
-
-    pub non_exhaustive: NonExhaustive,
 }
 
 impl Default for DateInputState {
@@ -128,33 +136,49 @@ impl DateInputState {
         Ok(s)
     }
 
+    #[inline]
     pub fn new_localized<S: AsRef<str>>(
         pattern: S,
         locale: chrono::Locale,
     ) -> Result<Self, fmt::Error> {
         let mut s = Self::default();
-        s.set_formats(pattern, locale)?;
+        s.set_format_loc(pattern, locale)?;
         Ok(s)
     }
 
     /// Reset to empty.
+    #[inline]
     pub fn reset(&mut self) {
         self.widget.reset();
     }
 
     /// chrono format string.
-    ///
-    /// generates a mask according to the format and overwrites whatever
-    /// set_mask() did.
-    pub fn set_format<S: AsRef<str>>(&mut self, pattern: S) -> Result<(), fmt::Error> {
-        self.set_formats(pattern, chrono::Locale::default())
+    #[inline]
+    pub fn format(&self) -> &str {
+        self.pattern.as_str()
+    }
+
+    /// chrono locale.
+    #[inline]
+    pub fn locale(&self) -> chrono::Locale {
+        self.locale
     }
 
     /// chrono format string.
     ///
     /// generates a mask according to the format and overwrites whatever
     /// set_mask() did.
-    pub fn set_formats<S: AsRef<str>>(
+    #[inline]
+    pub fn set_format<S: AsRef<str>>(&mut self, pattern: S) -> Result<(), fmt::Error> {
+        self.set_format_loc(pattern, chrono::Locale::default())
+    }
+
+    /// chrono format string.
+    ///
+    /// generates a mask according to the format and overwrites whatever
+    /// set_mask() did.
+    #[inline]
+    pub fn set_format_loc<S: AsRef<str>>(
         &mut self,
         pattern: S,
         locale: chrono::Locale,
@@ -265,19 +289,27 @@ impl DateInputState {
         Ok(())
     }
 
+    /// Parses the text according to the given pattern.
+    #[inline]
     pub fn value(&self) -> Result<NaiveDate, chrono::ParseError> {
         NaiveDate::parse_from_str(self.widget.compact_value().as_str(), self.pattern.as_str())
     }
 
+    /// Set the date value.
+    #[inline]
     pub fn set_value(&mut self, date: NaiveDate) {
         let v = date.format(self.pattern.as_str()).to_string();
         self.widget.set_value(v);
     }
 
+    /// Select all text.
+    #[inline]
     pub fn select_all(&mut self) {
         self.widget.select_all()
     }
 
+    /// Screen position of the cursor for rendering.
+    #[inline]
     pub fn screen_cursor(&self) -> Option<Position> {
         self.widget.screen_cursor()
     }
@@ -297,6 +329,8 @@ impl DateInputState {
 /// * `k` - subtract month
 /// * `J` - add year
 /// * `K` - subtract year
+///
+/// Calls handle(FocusKeys) afterwards.
 #[derive(Debug)]
 pub struct ConvenientKeys;
 

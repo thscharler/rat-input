@@ -19,7 +19,7 @@ pub enum EditConstraint<'a> {
     TitleLabel,
     /// Label occupying the full row, but rendering only part of it. (cols)
     TitleLabelWidth(u16),
-    /// Label occupying the full row. (rows)
+    /// Label occupying multiple full rows. (rows)
     TitleLabelRows(u16),
     /// Widget aligned with the label. (cols)
     Widget(u16),
@@ -27,7 +27,7 @@ pub enum EditConstraint<'a> {
     WidgetRows(u16, u16),
     /// Empty line. Only increase the line counter.
     Empty,
-    /// Empty line. (rows).  Only increase the line counter.
+    /// Empty lines. (rows). Only increase the line counter.
     EmptyRows(u16),
     /// Widget aligned with the left margin. (cols)
     LineWidget(u16),
@@ -55,6 +55,11 @@ impl LayoutEdit {
         self.widget[n].expect("layout-error")
     }
 
+    /// Create an iterator look-alike that gives access to both
+    /// label and widget areas.
+    ///
+    /// If you render your widgets in the order of the layout, you
+    /// don't need widget indexes any longer.
     pub fn iter(&self) -> LayoutEditIterator<'_> {
         LayoutEditIterator {
             l: self,
@@ -66,9 +71,10 @@ impl LayoutEdit {
 
 /// Iterates both the labels and the widgets.
 ///
-/// There are constraints like LineWidget and TitleLabel that create empty Label/Widget areas
-/// to keep the two vectors in sync. Those are automatically skipped when using widget()/label().
-/// Yes it's nice to have the label and the according widget at the same index, if you use indexing.
+/// You have to call both to keep the iterator in sync.
+/// For `TitleLable` and `RowWidget` you need only `label()` or
+/// `widget()` respectively.
+///
 #[derive(Debug)]
 pub struct LayoutEditIterator<'a> {
     idx_label: usize,
@@ -118,8 +124,10 @@ impl<'a> LayoutEditIterator<'a> {
     }
 }
 
-/// Simple layout for an edit mask.
-/// It creates one column of input widgets and aligns the labels.
+/// Layout for an edit mask with lots of label+widget pairs.
+///
+/// This neatly aligns labels and widgets in one column.
+///
 #[allow(clippy::comparison_chain)]
 pub fn layout_edit(area: Rect, constraints: &[EditConstraint<'_>]) -> LayoutEdit {
     let mut max_label = 0;

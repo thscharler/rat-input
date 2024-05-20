@@ -2,8 +2,6 @@
 //! A simple menu. No submenus.
 //!
 //! Supports hot-keys with '_' in the item text.
-//! The keys are trigger with Ctrl or the plain
-//! key if the menu has focus.
 //!
 use crate::_private::NonExhaustive;
 use crate::event::Outcome;
@@ -12,10 +10,9 @@ use crate::util::{next_opt, prev_opt, span_width};
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
-use ratatui::prelude::{Modifier, Span, Style, Widget};
-use ratatui::style::Stylize;
-use ratatui::text::{Line, Text};
-use ratatui::widgets::StatefulWidget;
+use ratatui::style::{Modifier, Style, Stylize};
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{StatefulWidget, Widget};
 use std::cmp::min;
 use std::fmt::Debug;
 
@@ -42,6 +39,24 @@ pub struct MenuStyle {
     pub non_exhaustive: NonExhaustive,
 }
 
+/// State for the menu.
+#[derive(Debug, Clone)]
+pub struct MenuLineState {
+    /// Focus
+    pub area: Rect,
+    /// Areas for each item.
+    pub areas: Vec<Rect>,
+    /// Hot keys
+    pub key: Vec<char>,
+    /// Selected item.
+    pub selected: Option<usize>,
+
+    /// Flags for mouse handling.
+    pub mouse: MouseFlags,
+
+    pub non_exhaustive: NonExhaustive,
+}
+
 impl<'a> Default for MenuLine<'a> {
     fn default() -> Self {
         Self {
@@ -64,6 +79,7 @@ impl<'a> MenuLine<'a> {
     }
 
     /// Combined style.
+    #[inline]
     pub fn styles(mut self, styles: MenuStyle) -> Self {
         self.style = styles.style;
         self.title_style = styles.title;
@@ -73,42 +89,49 @@ impl<'a> MenuLine<'a> {
     }
 
     /// Base style.
+    #[inline]
     pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.style = style.into();
         self
     }
 
     /// Menu-title style.
+    #[inline]
     pub fn title_style(mut self, style: impl Into<Style>) -> Self {
         self.title_style = Some(style.into());
         self
     }
 
     /// Selection
+    #[inline]
     pub fn select_style(mut self, style: impl Into<Style>) -> Self {
         self.select_style = Some(style.into());
         self
     }
 
     /// Selection + Focus
+    #[inline]
     pub fn select_style_focus(mut self, style: impl Into<Style>) -> Self {
         self.focus_style = Some(style.into());
         self
     }
 
     /// Title text.
+    #[inline]
     pub fn title(mut self, title: &'a str) -> Self {
         self.title = Span::from(title);
         self
     }
 
     /// Renders the content differently if focused.
+    #[inline]
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
     }
 
     /// Add item.
+    #[inline]
     pub fn add(mut self, menu_item: &'a str) -> Self {
         let (key, item) = menu_span(menu_item);
         self.key.push(key);
@@ -232,36 +255,28 @@ impl Default for MenuStyle {
     }
 }
 
-/// State for the menu.
-#[derive(Debug, Clone)]
-pub struct MenuLineState {
-    /// Focus
-    pub area: Rect,
-    pub areas: Vec<Rect>,
-    pub key: Vec<char>,
-    pub selected: Option<usize>,
-    pub mouse: MouseFlags,
-    pub non_exhaustive: NonExhaustive,
-}
-
 #[allow(clippy::len_without_is_empty)]
 impl MenuLineState {
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.areas.len()
     }
 
+    #[inline]
     pub fn selected(&self) -> Option<usize> {
         self.selected
     }
 
+    #[inline]
     pub fn select(&mut self, select: Option<usize>) {
         self.selected = select;
     }
 
+    #[inline]
     pub fn select_by_key(&mut self, cc: char) {
         let cc = cc.to_ascii_lowercase();
         for (i, k) in self.key.iter().enumerate() {
@@ -272,6 +287,7 @@ impl MenuLineState {
         }
     }
 
+    #[inline]
     pub fn item_at(&self, pos: Position) -> Option<usize> {
         for (i, r) in self.areas.iter().enumerate() {
             if r.contains(pos) {
@@ -281,10 +297,12 @@ impl MenuLineState {
         None
     }
 
+    #[inline]
     pub fn next(&mut self) {
         self.selected = next_opt(self.selected, 1, self.len() + 1);
     }
 
+    #[inline]
     pub fn prev(&mut self) {
         self.selected = prev_opt(self.selected, 1);
     }

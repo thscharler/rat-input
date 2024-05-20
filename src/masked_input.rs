@@ -34,7 +34,7 @@
 //!
 //! * Accepts a display overlay used instead of the default chars of the input mask.
 //!
-//! ```no_run rust
+//! ```rust ignore
 //! use ratatui::widgets::StatefulWidget;
 //! use rat_input::masked_input::{MaskedInput, MaskedInputState};
 //!
@@ -79,9 +79,9 @@ use format_num_pattern::NumberSymbols;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
-use ratatui::prelude::{BlockExt, Stylize};
-use ratatui::style::Style;
-use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, WidgetRef};
+use ratatui::prelude::BlockExt;
+use ratatui::style::{Style, Stylize};
+use ratatui::widgets::{Block, StatefulWidget, WidgetRef};
 use std::fmt;
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
@@ -106,6 +106,22 @@ pub struct MaskedInputStyle {
     pub focus: Option<Style>,
     pub select: Option<Style>,
     pub invalid: Option<Style>,
+    pub non_exhaustive: NonExhaustive,
+}
+
+/// State of the input-mask.
+#[derive(Debug, Clone)]
+pub struct MaskedInputState {
+    /// The position of the cursor in screen coordinates.
+    /// Can be directly used for [Frame::set_cursor()]
+    pub cursor: Option<Position>,
+    /// Area
+    pub area: Rect,
+    /// Mouse selection in progress.
+    pub mouse: MouseFlags,
+    /// Editing core.
+    pub value: InputMaskCore,
+    /// Construct with `..Default::default()`
     pub non_exhaustive: NonExhaustive,
 }
 
@@ -137,13 +153,21 @@ impl<'a> Default for MaskedInput<'a> {
 }
 
 impl<'a> MaskedInput<'a> {
-    /// Show the compact form, if the focus is not with this widget.
+    /// New
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Show a compact form of the content without unnecessary spaces,
+    /// if this widget is not focused.
+    #[inline]
     pub fn show_compact(mut self, show_compact: bool) -> Self {
         self.show_compact = show_compact;
         self
     }
 
     /// Set the combined style.
+    #[inline]
     pub fn styles(mut self, style: MaskedInputStyle) -> Self {
         self.style = style.style;
         self.focus_style = style.focus;
@@ -153,29 +177,35 @@ impl<'a> MaskedInput<'a> {
     }
 
     /// Base text style.
+    #[inline]
     pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.style = style.into();
         self
     }
 
     /// Style when focused.
+    #[inline]
     pub fn focus_style(mut self, style: impl Into<Style>) -> Self {
         self.focus_style = Some(style.into());
         self
     }
 
     /// Style for selection
+    #[inline]
     pub fn select_style(mut self, style: impl Into<Style>) -> Self {
         self.select_style = Some(style.into());
         self
     }
 
-    /// Style for the invalid indicator.
+    /// Style for invalid.
+    #[inline]
     pub fn invalid_style(mut self, style: impl Into<Style>) -> Self {
         self.invalid_style = Some(style.into());
         self
     }
 
+    /// Block.
+    #[inline]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
         self
@@ -184,7 +214,9 @@ impl<'a> MaskedInput<'a> {
     /// Renders the content differently if focused.
     ///
     /// * Selection is only shown if focused.
+    /// * May use a compact form if not focused.
     ///
+    #[inline]
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
@@ -192,6 +224,7 @@ impl<'a> MaskedInput<'a> {
 
     /// Renders the content differently if invalid.
     /// Uses the invalid style instead of the base style for rendering.
+    #[inline]
     pub fn valid(mut self, valid: bool) -> Self {
         self.valid = valid;
         self
@@ -202,14 +235,6 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
     type State = MaskedInputState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        StatefulWidgetRef::render_ref(&self, area, buf, state);
-    }
-}
-
-impl<'a> StatefulWidgetRef for MaskedInput<'a> {
-    type State = MaskedInputState;
-
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         state.area = self.block.inner_if_some(area);
         state.value.set_width(state.area.width as usize);
 
@@ -287,29 +312,13 @@ impl<'a> StatefulWidgetRef for MaskedInput<'a> {
 
         if self.focused {
             state.cursor = Some(Position::new(
-                state.area.x + state.visible_cursor(),
+                state.area.x + (state.value.cursor() - state.value.offset()) as u16,
                 state.area.y,
             ));
         } else {
             state.cursor = None;
         }
     }
-}
-
-/// State of the input-mask.
-#[derive(Debug, Clone)]
-pub struct MaskedInputState {
-    /// The position of the cursor in screen coordinates.
-    /// Can be directly used for [Frame::set_cursor()]
-    pub cursor: Option<Position>,
-    /// Area
-    pub area: Rect,
-    /// Mouse selection in progress.
-    pub mouse: MouseFlags,
-    /// Editing core.
-    pub value: InputMaskCore,
-    /// Construct with `..Default::default()`
-    pub non_exhaustive: NonExhaustive,
 }
 
 impl Default for MaskedInputState {
@@ -450,6 +459,8 @@ impl MaskedInputState {
         Self::default()
     }
 
+    /// Uses localized symbols for number formatting.
+    #[inline]
     pub fn new_with_symbols(sym: NumberSymbols) -> Self {
         Self {
             value: InputMaskCore::new_with_symbols(sym),
@@ -458,31 +469,37 @@ impl MaskedInputState {
     }
 
     /// Reset to empty.
+    #[inline]
     pub fn reset(&mut self) {
         self.value.reset();
     }
 
     /// Offset shown.
+    #[inline]
     pub fn offset(&self) -> usize {
         self.value.offset()
     }
 
     /// Offset shown. This is corrected if the cursor wouldn't be visible.
+    #[inline]
     pub fn set_offset(&mut self, offset: usize) {
         self.value.set_offset(offset);
     }
 
     /// Set the cursor position, reset selection.
+    #[inline]
     pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) {
         self.value.set_cursor(cursor, extend_selection);
     }
 
     /// Place cursor at decimal separator, if any. 0 otherwise.
+    #[inline]
     pub fn set_default_cursor(&mut self) {
         self.value.set_default_cursor();
     }
 
     /// Cursor position
+    #[inline]
     pub fn cursor(&self) -> usize {
         self.value.cursor()
     }
@@ -496,11 +513,13 @@ impl MaskedInputState {
     ///
     /// If the length differs from the mask, the difference will be
     /// ignored / filled with defaults.
+    #[inline]
     pub fn set_display_mask<S: Into<String>>(&mut self, s: S) {
         self.value.set_display_mask(s);
     }
 
     /// Display mask.
+    #[inline]
     pub fn display_mask(&self) -> String {
         self.value.display_mask()
     }
@@ -535,16 +554,19 @@ impl MaskedInputState {
     /// * all other ascii characters a reserved.
     ///
     /// Inspired by <https://support.microsoft.com/en-gb/office/control-data-entry-formats-with-input-masks-e125997a-7791-49e5-8672-4a47832de8da>
+    #[inline]
     pub fn set_mask<S: AsRef<str>>(&mut self, s: S) -> Result<(), fmt::Error> {
         self.value.set_mask(s)
     }
 
     /// Display mask.
+    #[inline]
     pub fn mask(&self) -> String {
         self.value.mask()
     }
 
     /// Mask with some debug information.
+    #[inline]
     pub fn debug_mask(&self) -> String {
         self.value.debug_mask()
     }
@@ -553,11 +575,13 @@ impl MaskedInputState {
     ///
     /// These are only used for rendering and to map user input.
     /// The value itself uses ".", "," and "-".
+    #[inline]
     pub fn set_num_symbols(&mut self, sym: NumberSymbols) {
         self.value.set_num_symbols(sym);
     }
 
     /// Create a default value according to the mask.
+    #[inline]
     pub fn default_value(&self) -> String {
         self.value.default_value()
     }
@@ -567,52 +591,62 @@ impl MaskedInputState {
     /// No checks if the value conforms to the mask.
     /// If the value is too short it will be filled with space.
     /// if the value is too long it will be truncated.
+    #[inline]
     pub fn set_value<S: Into<String>>(&mut self, s: S) {
         self.value.set_value(s);
     }
 
     /// Value with all punctuation and default values according to the mask type.
+    #[inline]
     pub fn value(&self) -> &str {
         self.value.value()
     }
 
     /// Value split along any separators
+    #[inline]
     pub fn value_parts(&self) -> Vec<String> {
         self.value.value_parts()
     }
 
     /// Value without optional whitespace and grouping separators. Might be easier to parse.
+    #[inline]
     pub fn compact_value(&self) -> String {
         self.value.compact_value()
     }
 
     /// Value.
+    #[inline]
     pub fn as_str(&self) -> &str {
         self.value.value()
     }
 
     ///
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.value.is_empty()
     }
 
     /// Length in grapheme count.
+    #[inline]
     pub fn len(&self) -> usize {
         self.value.len()
     }
 
     /// Selection
+    #[inline]
     pub fn has_selection(&self) -> bool {
         self.value.has_selection()
     }
 
     /// Selection
+    #[inline]
     pub fn set_selection(&mut self, anchor: usize, cursor: usize) {
         self.value.set_cursor(anchor, false);
         self.value.set_cursor(cursor, true);
     }
 
     /// Selection
+    #[inline]
     pub fn select_all(&mut self) {
         // the other way round it fails if width is 0.
         self.value.set_cursor(self.value.len(), false);
@@ -620,16 +654,19 @@ impl MaskedInputState {
     }
 
     /// Selection
+    #[inline]
     pub fn selection(&self) -> Range<usize> {
         self.value.selection()
     }
 
     /// Selection
+    #[inline]
     pub fn selection_str(&self) -> &str {
         util::split3(self.value.value(), self.value.selection()).1
     }
 
     /// Set the cursor position from a visual position relative to the origin.
+    #[inline]
     pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
         let pos = if rpos < 0 {
             self.value.offset().saturating_sub(-rpos as usize)
@@ -646,21 +683,25 @@ impl MaskedInputState {
     }
 
     /// The current text cursor as an absolute screen position.
+    #[inline]
     pub fn screen_cursor(&self) -> Option<Position> {
         self.cursor
     }
 
     /// Previous word boundary.
+    #[inline]
     pub fn prev_word_boundary(&self) -> usize {
         self.value.prev_word_boundary()
     }
 
     /// Next word boundary.
+    #[inline]
     pub fn next_word_boundary(&self) -> usize {
         self.value.next_word_boundary()
     }
 
     /// Move to the next char.
+    #[inline]
     pub fn move_to_next(&mut self, extend_selection: bool) {
         if !extend_selection && self.value.has_selection() {
             let c = self.value.selection().end;
@@ -672,6 +713,7 @@ impl MaskedInputState {
     }
 
     /// Move to the previous char.
+    #[inline]
     pub fn move_to_prev(&mut self, extend_selection: bool) {
         if !extend_selection && self.value.has_selection() {
             let c = self.value.selection().start;
@@ -683,6 +725,7 @@ impl MaskedInputState {
     }
 
     /// Insert a char at the current position.
+    #[inline]
     pub fn insert_char(&mut self, c: char) {
         if self.value.has_selection() {
             self.value.remove_selection(self.value.selection());
@@ -693,11 +736,13 @@ impl MaskedInputState {
 
     /// Remove the selected range. The text will be replaced with the default value
     /// as defined by the mask.
+    #[inline]
     pub fn remove_selection(&mut self, selection: Range<usize>) {
         self.value.remove_selection(selection);
     }
 
     /// Delete the char before the cursor.
+    #[inline]
     pub fn delete_prev_char(&mut self) {
         if self.value.is_select_all() {
             self.value.reset();
@@ -709,6 +754,7 @@ impl MaskedInputState {
     }
 
     /// Delete the char after the cursor.
+    #[inline]
     pub fn delete_next_char(&mut self) {
         if self.value.is_select_all() {
             self.value.reset();
@@ -717,11 +763,6 @@ impl MaskedInputState {
         } else if self.value.cursor() < self.value.len() {
             self.value.remove_next();
         }
-    }
-
-    /// Visible cursor position.
-    fn visible_cursor(&mut self) -> u16 {
-        (self.value.cursor() - self.value.offset()) as u16
     }
 }
 

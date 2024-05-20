@@ -1,14 +1,15 @@
 //!
 //! Render a month of a calendar.
+//! Can be localized with a chrono::Locale.
 //!
 
 use crate::_private::NonExhaustive;
 use chrono::{Datelike, NaiveDate, Weekday};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::prelude::{Line, Span, StatefulWidget, Text};
 use ratatui::style::Style;
-use ratatui::widgets::Widget;
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{StatefulWidget, Widget};
 use std::fmt::{Debug, Formatter};
 
 /// Renders a month.
@@ -36,10 +37,15 @@ pub struct MonthStyle {
 /// Month state.
 #[derive(Debug, Clone)]
 pub struct MonthState {
+    /// Total area.
     pub area: Rect,
+    /// Area for the month name.
     pub area_month: Rect,
+    /// Area for the days of the month.
     pub area_days: [Rect; 31],
+    /// Area for the week numbers.
     pub weeks: [Rect; 6],
+
     pub non_exhaustive: NonExhaustive,
 }
 
@@ -100,18 +106,25 @@ impl Debug for Month {
 }
 
 impl Month {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Sets the starting date.
+    #[inline]
     pub fn date(mut self, s: NaiveDate) -> Self {
         self.start_date = s;
         self
     }
 
+    #[inline]
     pub fn locale(mut self, loc: chrono::Locale) -> Self {
         self.loc = loc;
         self
     }
 
     /// Set the composite style.
+    #[inline]
     pub fn style(mut self, s: MonthStyle) -> Self {
         self.title_style = s.title_style;
         self.week_style = s.week_style;
@@ -120,29 +133,34 @@ impl Month {
     }
 
     /// Sets a closure that is called to calculate the day style.
+    #[inline]
     pub fn day_style(mut self, s: Box<dyn Fn(NaiveDate) -> Style>) -> Self {
         self.day_style = s;
         self
     }
 
     /// Set the week number style
+    #[inline]
     pub fn week_style(mut self, s: impl Into<Style>) -> Self {
         self.week_style = s.into();
         self
     }
 
     /// Set the month-name style.
+    #[inline]
     pub fn title_style(mut self, s: impl Into<Style>) -> Self {
         self.title_style = s.into();
         self
     }
 
     /// Required width for the widget.
+    #[inline]
     pub fn width(&self) -> usize {
         8 * 3
     }
 
     /// Required height for the widget. Varies.
+    #[inline]
     pub fn height(&self) -> usize {
         let mut r = 0;
         let mut day = self.start_date;
@@ -164,9 +182,7 @@ impl Month {
         }
         r += 1;
         while month == day.month() {
-            for _ in 0..7 {
-                day += chrono::Duration::try_days(1).expect("days");
-            }
+            day += chrono::Duration::try_days(7).expect("days");
             r += 1;
         }
 

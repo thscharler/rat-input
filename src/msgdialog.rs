@@ -9,9 +9,9 @@ use crate::layout_dialog::layout_dialog;
 use rat_event::{ct_event, FocusKeys, HandleEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Flex, Margin, Rect};
-use ratatui::prelude::{StatefulWidget, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Text};
-use ratatui::widgets::{Block, Paragraph, Widget};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget};
 use std::fmt::Debug;
 
 /// Basic status dialog for longer messages.
@@ -32,16 +32,20 @@ pub struct MsgDialogStyle {
 /// State for the status dialog.
 #[derive(Debug, Clone)]
 pub struct MsgDialogState {
-    // Dialog is active.
+    /// Dialog is active.
     pub active: bool,
+    /// Area
     pub area: Rect,
+    /// Dialog text.
     pub message: String,
+    /// Ok button
     pub button: ButtonState,
 
     pub non_exhaustive: NonExhaustive,
 }
 
 impl MsgDialog {
+    /// New widget
     pub fn new() -> Self {
         Self {
             style: Default::default(),
@@ -80,7 +84,7 @@ impl Default for MsgDialogStyle {
 }
 
 impl MsgDialogState {
-    /// Clear
+    /// Clear message text, set active to false.
     pub fn clear(&mut self) {
         self.active = false;
         self.message = Default::default();

@@ -7,10 +7,10 @@ use crate::event::Outcome;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
-use ratatui::prelude::{BlockExt, Span, StatefulWidget};
+use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
-use ratatui::text::{Line, Text};
-use ratatui::widgets::{Block, StatefulWidgetRef, WidgetRef};
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{Block, StatefulWidget, WidgetRef};
 
 /// Button widget.
 #[derive(Debug, Default, Clone)]
@@ -32,6 +32,19 @@ pub struct ButtonStyle {
     pub non_exhaustive: NonExhaustive,
 }
 
+#[derive(Debug, Clone)]
+pub struct ButtonState {
+    /// Complete area
+    pub area: Rect,
+    /// Inner area.
+    pub inner_area: Rect,
+
+    /// Button has been clicked but not released yet.
+    pub armed: bool,
+
+    pub non_exhaustive: NonExhaustive,
+}
+
 impl Default for ButtonStyle {
     fn default() -> Self {
         Self {
@@ -44,6 +57,11 @@ impl Default for ButtonStyle {
 }
 
 impl<'a> Button<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set all styles.
     #[inline]
     pub fn styles(mut self, styles: ButtonStyle) -> Self {
         self.style = styles.style;
@@ -52,6 +70,7 @@ impl<'a> Button<'a> {
         self
     }
 
+    /// Set the base-style.
     #[inline]
     pub fn style(mut self, style: impl Into<Style>) -> Self {
         self.style = style.into();
@@ -65,25 +84,28 @@ impl<'a> Button<'a> {
         self
     }
 
+    /// Style when clicked but not released.
     #[inline]
     pub fn armed_style(mut self, style: impl Into<Style>) -> Self {
         self.armed_style = Some(style.into());
         self
     }
 
+    /// Button text.
     #[inline]
     pub fn text(mut self, text: impl Into<Text<'a>>) -> Self {
         self.text = text.into();
         self
     }
 
+    /// Block.
     #[inline]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
         self
     }
 
-    /// Renders differently if focused.
+    /// Renders the button differently if focused.
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
@@ -156,14 +178,6 @@ impl<'a> StatefulWidget for Button<'a> {
     type State = ButtonState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_ref(area, buf, state);
-    }
-}
-
-impl<'a> StatefulWidgetRef for Button<'a> {
-    type State = ButtonState;
-
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         state.area = area;
         state.inner_area = self.block.inner_if_some(area);
 
@@ -199,16 +213,6 @@ impl<'a> StatefulWidgetRef for Button<'a> {
 
         self.text.render_ref(layout[1], buf);
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct ButtonState {
-    pub area: Rect,
-    pub inner_area: Rect,
-
-    pub armed: bool,
-
-    pub non_exhaustive: NonExhaustive,
 }
 
 impl Default for ButtonState {
