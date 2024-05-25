@@ -402,28 +402,28 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineSt
                     None => MenuOutcome::NotUsed,
                 }
             }
-            ct_event!(keycode release Left) => {
+            ct_event!(keycode press Left) => {
                 self.prev();
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),
                     None => unreachable!(),
                 }
             }
-            ct_event!(keycode release Right) => {
+            ct_event!(keycode press Right) => {
                 self.next();
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),
                     None => unreachable!(),
                 }
             }
-            ct_event!(keycode release Home) => {
+            ct_event!(keycode press Home) => {
                 self.select(Some(0));
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),
                     None => unreachable!(),
                 }
             }
-            ct_event!(keycode release End) => {
+            ct_event!(keycode press End) => {
                 self.select(Some(self.len() - 1));
                 match self.selected {
                     Some(a) => MenuOutcome::Selected(a),

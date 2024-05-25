@@ -366,18 +366,16 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MaskedInputSta
                 ct_event!(keycode press Delete) => self.delete_next_char(),
                 ct_event!(keycode press CONTROL-Backspace) => {
                     let prev = self.prev_word_boundary();
-                    self.remove_selection(prev..self.cursor());
+                    self.remove(prev..self.cursor());
                 }
                 ct_event!(keycode press CONTROL-Delete) => {
                     let next = self.next_word_boundary();
-                    self.remove_selection(self.cursor()..next);
+                    self.remove(self.cursor()..next);
                 }
                 ct_event!(key press CONTROL-'d') => self.set_value(self.default_value()),
-                ct_event!(keycode press CONTROL_SHIFT-Backspace) => {
-                    self.remove_selection(0..self.cursor())
-                }
+                ct_event!(keycode press CONTROL_SHIFT-Backspace) => self.remove(0..self.cursor()),
                 ct_event!(keycode press CONTROL_SHIFT-Delete) => {
-                    self.remove_selection(self.cursor()..self.len())
+                    self.remove(self.cursor()..self.len())
                 }
                 ct_event!(key press c) | ct_event!(key press SHIFT-c) => self.insert_char(*c),
                 _ => break 'f Outcome::NotUsed,
@@ -399,7 +397,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputSta
                 if self.area.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
                     let c = column - self.area.x;
-                    if self.set_visual_cursor(c as isize, false) {
+                    if self.set_screen_cursor(c as isize, false) {
                         Outcome::Changed
                     } else {
                         Outcome::Unchanged
@@ -411,7 +409,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputSta
             ct_event!(mouse drag Left for column, _row) => {
                 if self.mouse.do_drag() {
                     let c = (*column as isize) - (self.area.x as isize);
-                    if self.set_visual_cursor(c, true) {
+                    if self.set_screen_cursor(c, true) {
                         Outcome::Changed
                     } else {
                         Outcome::Unchanged
@@ -614,12 +612,6 @@ impl MaskedInputState {
         self.value.compact_value()
     }
 
-    /// Value.
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        self.value.value()
-    }
-
     ///
     #[inline]
     pub fn is_empty(&self) -> bool {
@@ -665,9 +657,23 @@ impl MaskedInputState {
         util::split3(self.value.value(), self.value.selection()).1
     }
 
-    /// Set the cursor position from a visual position relative to the origin.
+    /// Previous word boundary.
     #[inline]
-    pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
+    pub fn prev_word_boundary(&self) -> usize {
+        self.value.prev_word_boundary()
+    }
+
+    /// Next word boundary.
+    #[inline]
+    pub fn next_word_boundary(&self) -> usize {
+        self.value.next_word_boundary()
+    }
+
+    /// Set the cursor position from a screen position relative to the origin
+    /// of the widget. This value can be negative, which selects a currently
+    /// not visible position and scrolls to it.
+    #[inline]
+    pub fn set_screen_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
         let pos = if rpos < 0 {
             self.value.offset().saturating_sub(-rpos as usize)
         } else {
@@ -686,18 +692,6 @@ impl MaskedInputState {
     #[inline]
     pub fn screen_cursor(&self) -> Option<Position> {
         self.cursor
-    }
-
-    /// Previous word boundary.
-    #[inline]
-    pub fn prev_word_boundary(&self) -> usize {
-        self.value.prev_word_boundary()
-    }
-
-    /// Next word boundary.
-    #[inline]
-    pub fn next_word_boundary(&self) -> usize {
-        self.value.next_word_boundary()
     }
 
     /// Move to the next char.
@@ -737,8 +731,8 @@ impl MaskedInputState {
     /// Remove the selected range. The text will be replaced with the default value
     /// as defined by the mask.
     #[inline]
-    pub fn remove_selection(&mut self, selection: Range<usize>) {
-        self.value.remove_selection(selection);
+    pub fn remove(&mut self, range: Range<usize>) {
+        self.value.remove_selection(range);
     }
 
     /// Delete the char before the cursor.

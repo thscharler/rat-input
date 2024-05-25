@@ -285,18 +285,16 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for TextInputState
                 ct_event!(keycode press Delete) => self.delete_next_char(),
                 ct_event!(keycode press CONTROL-Backspace) => {
                     let prev = self.prev_word_boundary();
-                    self.replace(prev..self.cursor(), "");
+                    self.remove(prev..self.cursor());
                 }
                 ct_event!(keycode press CONTROL-Delete) => {
                     let next = self.next_word_boundary();
-                    self.replace(self.cursor()..next, "");
+                    self.remove(self.cursor()..next);
                 }
                 ct_event!(key press CONTROL-'d') => self.set_value(""),
-                ct_event!(keycode press CONTROL_SHIFT-Backspace) => {
-                    self.replace(0..self.cursor(), "")
-                }
+                ct_event!(keycode press CONTROL_SHIFT-Backspace) => self.remove(0..self.cursor()),
                 ct_event!(keycode press CONTROL_SHIFT-Delete) => {
-                    self.replace(self.cursor()..self.len(), "")
+                    self.remove(self.cursor()..self.len())
                 }
                 ct_event!(key press c) | ct_event!(key press SHIFT-c) => self.insert_char(*c),
                 _ => break 'f Outcome::NotUsed,
@@ -318,7 +316,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for TextInputState
                 if self.area.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
                     let c = column - self.area.x;
-                    if self.set_visual_cursor(c as isize, false) {
+                    if self.set_screen_cursor(c as isize, false) {
                         Outcome::Changed
                     } else {
                         Outcome::Unchanged
@@ -330,7 +328,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for TextInputState
             ct_event!(mouse drag Left for column, _row) => {
                 if self.mouse.do_drag() {
                     let c = (*column as isize) - (self.area.x as isize);
-                    if self.set_visual_cursor(c, true) {
+                    if self.set_screen_cursor(c, true) {
                         Outcome::Changed
                     } else {
                         Outcome::Unchanged
@@ -369,6 +367,10 @@ pub fn handle_mouse_events(state: &mut TextInputState, event: &crossterm::event:
 }
 
 impl TextInputState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Reset to empty.
     #[inline]
     pub fn reset(&mut self) {
@@ -409,12 +411,6 @@ impl TextInputState {
     #[inline]
     pub fn value(&self) -> &str {
         self.value.value()
-    }
-
-    /// Text
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        self.value.as_str()
     }
 
     /// Empty.
@@ -458,7 +454,7 @@ impl TextInputState {
     /// Selection.
     #[inline]
     pub fn selection_str(&self) -> &str {
-        util::split3(self.value.as_str(), self.value.selection()).1
+        util::split3(self.value.value(), self.value.selection()).1
     }
 
     /// Previous word boundary
@@ -473,9 +469,11 @@ impl TextInputState {
         self.value.next_word_boundary()
     }
 
-    /// Set the cursor position from a visual position relative to the origin.
+    /// Set the cursor position from a screen position relative to the origin
+    /// of the widget. This value can be negative, which selects a currently
+    /// not visible position and scrolls to it.
     #[inline]
-    pub fn set_visual_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
+    pub fn set_screen_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
         let pos = if rpos < 0 {
             self.value.offset().saturating_sub(-rpos as usize)
         } else {
@@ -526,10 +524,9 @@ impl TextInputState {
         self.value.insert_char(c);
     }
 
-    /// Replace the given range with a new string.
     #[inline]
-    pub fn replace(&mut self, range: Range<usize>, new: &str) {
-        self.value.replace(range, new);
+    pub fn remove(&mut self, range: Range<usize>) {
+        self.value.remove(range);
     }
 
     /// Delete the char before the cursor.
@@ -734,6 +731,10 @@ pub mod core {
             char_buf.push(new);
             self.replace(selection, char_buf.as_str());
             self.char_buf = char_buf;
+        }
+
+        pub fn remove(&mut self, range: Range<usize>) {
+            self.replace(range, "");
         }
 
         /// Insert a string, replacing the selection.
