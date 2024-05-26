@@ -56,8 +56,10 @@ pub struct TextInputState {
     /// The position of the cursor in screen coordinates.
     /// Can be directly used for [Frame::set_cursor()]
     pub cursor: Option<Position>,
-    /// Area inside a possible block.
+    /// The whole area with block.
     pub area: Rect,
+    /// Area inside a possible block.
+    pub inner: Rect,
     /// Mouse selection in progress.
     pub mouse: MouseFlags,
     /// Editing core
@@ -166,8 +168,9 @@ impl<'a> StatefulWidget for TextInput<'a> {
     type State = TextInputState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.area = self.block.inner_if_some(area);
-        state.value.set_width(state.area.width as usize);
+        state.area = area;
+        state.inner = self.block.inner_if_some(area);
+        state.value.set_width(state.inner.width as usize);
 
         self.block.render_ref(area, buf);
 
@@ -207,7 +210,7 @@ impl<'a> StatefulWidget for TextInput<'a> {
             }
         };
 
-        let area = state.area.intersection(buf.area);
+        let area = state.inner.intersection(buf.area);
 
         let selection = util::clamp_shift(
             state.value.selection(),
@@ -233,7 +236,7 @@ impl<'a> StatefulWidget for TextInput<'a> {
 
         if self.focused {
             let cursor = state.value.cursor().saturating_sub(state.value.offset()) as u16;
-            state.cursor = Some(Position::new(state.area.x + cursor, state.area.y));
+            state.cursor = Some(Position::new(state.inner.x + cursor, state.inner.y));
         } else {
             state.cursor = None;
         }
@@ -245,6 +248,7 @@ impl Default for TextInputState {
         Self {
             cursor: Default::default(),
             area: Default::default(),
+            inner: Default::default(),
             mouse: Default::default(),
             value: Default::default(),
             non_exhaustive: NonExhaustive,
@@ -313,9 +317,9 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for TextInputState
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> Outcome {
         match event {
             ct_event!(mouse down Left for column,row) => {
-                if self.area.contains(Position::new(*column, *row)) {
+                if self.inner.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
-                    let c = column - self.area.x;
+                    let c = column - self.inner.x;
                     if self.set_screen_cursor(c as isize, false) {
                         Outcome::Changed
                     } else {
@@ -327,7 +331,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for TextInputState
             }
             ct_event!(mouse drag Left for column, _row) => {
                 if self.mouse.do_drag() {
-                    let c = (*column as isize) - (self.area.x as isize);
+                    let c = (*column as isize) - (self.inner.x as isize);
                     if self.set_screen_cursor(c, true) {
                         Outcome::Changed
                     } else {
@@ -533,11 +537,11 @@ impl TextInputState {
     #[inline]
     pub fn delete_prev_char(&mut self) {
         if self.value.has_selection() {
-            self.value.replace(self.value.selection(), "");
+            self.value.remove(self.value.selection());
         } else if self.value.cursor() == 0 {
         } else {
             self.value
-                .replace(self.value.cursor() - 1..self.value.cursor(), "");
+                .remove(self.value.cursor() - 1..self.value.cursor());
         }
     }
 
@@ -545,11 +549,11 @@ impl TextInputState {
     #[inline]
     pub fn delete_next_char(&mut self) {
         if self.value.has_selection() {
-            self.value.replace(self.value.selection(), "");
+            self.value.remove(self.value.selection());
         } else if self.value.cursor() == self.value.len() {
         } else {
             self.value
-                .replace(self.value.cursor()..self.value.cursor() + 1, "");
+                .remove(self.value.cursor()..self.value.cursor() + 1);
         }
     }
 }
@@ -638,6 +642,11 @@ pub mod core {
             self.cursor
         }
 
+        /// Selection anchor
+        pub fn anchor(&self) -> usize {
+            self.anchor
+        }
+
         /// Set the value. Resets cursor and anchor to 0.
         pub fn set_value<S: Into<String>>(&mut self, s: S) {
             self.value = s.into();
@@ -649,11 +658,6 @@ pub mod core {
 
         /// Value
         pub fn value(&self) -> &str {
-            self.value.as_str()
-        }
-
-        /// Value
-        pub fn as_str(&self) -> &str {
             self.value.as_str()
         }
 
@@ -670,11 +674,6 @@ pub mod core {
         /// Value lenght as grapheme-count
         pub fn len(&self) -> usize {
             self.len
-        }
-
-        /// Selection anchor
-        pub fn anchor(&self) -> usize {
-            self.anchor
         }
 
         /// Anchor is active
@@ -733,12 +732,13 @@ pub mod core {
             self.char_buf = char_buf;
         }
 
+        /// Remove the selection.
         pub fn remove(&mut self, range: Range<usize>) {
             self.replace(range, "");
         }
 
         /// Insert a string, replacing the selection.
-        pub fn replace(&mut self, range: Range<usize>, new: &str) {
+        fn replace(&mut self, range: Range<usize>, new: &str) {
             let new_len = new.graphemes(true).count();
 
             let (before_str, sel_str, after_str) = util::split3(self.value.as_str(), range);

@@ -115,8 +115,10 @@ pub struct MaskedInputState {
     /// The position of the cursor in screen coordinates.
     /// Can be directly used for [Frame::set_cursor()]
     pub cursor: Option<Position>,
-    /// Area
+    /// Area with block
     pub area: Rect,
+    /// Area
+    pub inner: Rect,
     /// Mouse selection in progress.
     pub mouse: MouseFlags,
     /// Editing core.
@@ -235,8 +237,9 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
     type State = MaskedInputState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.area = self.block.inner_if_some(area);
-        state.value.set_width(state.area.width as usize);
+        state.area = area;
+        state.inner = self.block.inner_if_some(area);
+        state.value.set_width(state.inner.width as usize);
 
         self.block.render_ref(area, buf);
 
@@ -286,7 +289,7 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
             }
         };
 
-        let area = state.area.intersection(buf.area);
+        let area = state.inner.intersection(buf.area);
 
         let selection = clamp_shift(
             state.value.selection(),
@@ -312,8 +315,8 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
 
         if self.focused {
             state.cursor = Some(Position::new(
-                state.area.x + (state.value.cursor() - state.value.offset()) as u16,
-                state.area.y,
+                state.inner.x + (state.value.cursor() - state.value.offset()) as u16,
+                state.inner.y,
             ));
         } else {
             state.cursor = None;
@@ -326,6 +329,7 @@ impl Default for MaskedInputState {
         Self {
             cursor: Default::default(),
             area: Default::default(),
+            inner: Default::default(),
             mouse: Default::default(),
             value: Default::default(),
             non_exhaustive: NonExhaustive,
@@ -394,9 +398,9 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputSta
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> Outcome {
         let r = match event {
             ct_event!(mouse down Left for column,row) => {
-                if self.area.contains(Position::new(*column, *row)) {
+                if self.inner.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
-                    let c = column - self.area.x;
+                    let c = column - self.inner.x;
                     if self.set_screen_cursor(c as isize, false) {
                         Outcome::Changed
                     } else {
@@ -408,7 +412,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputSta
             }
             ct_event!(mouse drag Left for column, _row) => {
                 if self.mouse.do_drag() {
-                    let c = (*column as isize) - (self.area.x as isize);
+                    let c = (*column as isize) - (self.inner.x as isize);
                     if self.set_screen_cursor(c, true) {
                         Outcome::Changed
                     } else {
