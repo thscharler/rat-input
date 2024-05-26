@@ -12,7 +12,7 @@ use ratatui::prelude::{BlockExt, Stylize};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, StatefulWidget};
 use std::cmp::{max, min};
-use std::ops::Range;
+use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone)]
 pub struct TextArea<'a> {
@@ -54,6 +54,11 @@ impl<'a> TextArea<'a> {
         self.focus_style = Some(style);
         self
     }
+
+    pub fn text_style<T: IntoIterator<Item = Style>>(mut self, styles: T) -> Self {
+        self.text_style = styles.into_iter().collect();
+        self
+    }
 }
 
 impl<'a> StatefulWidget for TextArea<'a> {
@@ -88,7 +93,7 @@ impl<'a> StatefulWidget for TextArea<'a> {
         };
 
         let selection = state.selection();
-        debug!("selection rr {:?}", selection);
+        let mut styles = Vec::new();
 
         let mut line_iter = state.value.iter_scrolled();
         for row in 0..area.height {
@@ -117,10 +122,22 @@ impl<'a> StatefulWidget for TextArea<'a> {
                     let tx = col as usize + ox;
                     let ty = row as usize + oy;
 
+                    let mut style = Style::default();
+
+                    // text-styles
+                    state.styles_at((tx, ty), &mut styles);
+                    for idx in styles.iter().copied() {
+                        let Some(s) = self.text_style.get(idx) else {
+                            panic!("invalid style nr: {}", idx);
+                        };
+                        style = style.patch(*s);
+                    }
+
                     // selection
                     if selection.contains((tx, ty)) {
-                        cell.set_style(select_style);
-                    }
+                        style = style.patch(select_style);
+                    };
+                    cell.set_style(style);
                 }
             } else {
                 for col in 0..area.width {
@@ -145,64 +162,104 @@ impl Default for TextAreaState {
 }
 
 impl TextAreaState {
+    #[inline]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[inline]
     pub fn set_offset(&mut self, offset: (usize, usize)) -> bool {
         self.value.set_offset(offset)
     }
 
+    #[inline]
     pub fn offset(&self) -> (usize, usize) {
         self.value.offset()
     }
 
+    #[inline]
     pub fn set_cursor(&mut self, cursor: (usize, usize), extend_selection: bool) -> bool {
         self.value.set_cursor(cursor, extend_selection)
     }
 
+    #[inline]
     pub fn cursor(&self) -> (usize, usize) {
         self.value.cursor()
     }
 
+    #[inline]
     pub fn anchor(&self) -> (usize, usize) {
         self.value.anchor()
     }
 
+    #[inline]
     pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
         self.value.set_value(s);
     }
 
+    #[inline]
     pub fn value(&self) -> String {
         self.value.value()
     }
 
+    #[inline]
     pub fn line(&self, n: usize) -> RopeGraphemes<'_> {
         self.value.line(n)
     }
 
+    #[inline]
     pub fn line_width(&self, n: usize) -> usize {
         self.value.line_width(n)
     }
 
+    #[inline]
     pub fn len_lines(&self) -> usize {
         self.value.len_lines()
     }
 
+    #[inline]
     pub fn clear(&mut self) {
         self.value.clear();
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.value.is_empty()
     }
 
+    #[inline]
     pub fn has_selection(&self) -> bool {
         self.value.has_selection()
     }
 
+    #[inline]
     pub fn selection(&self) -> TextRange {
         self.value.selection()
+    }
+
+    #[inline]
+    pub fn set_selection(&mut self, range: TextRange) -> bool {
+        self.value.set_selection(range)
+    }
+
+    #[inline]
+    pub fn select_all(&mut self) -> bool {
+        self.value.select_all()
+    }
+
+    #[inline]
+    pub fn clear_styles(&mut self) {
+        self.value.clear_styles();
+    }
+
+    #[inline]
+    pub fn add_style(&mut self, range: TextRange, style: usize) {
+        self.value.add_style(range, style);
+    }
+
+    #[inline]
+    pub fn styles_at(&self, pos: (usize, usize), result: &mut Vec<usize>) {
+        self.value.styles_at(pos, result)
     }
 
     pub fn move_left(&mut self, n: usize, extend_selection: bool) -> bool {
@@ -291,6 +348,7 @@ impl TextAreaState {
             0
         };
 
+        self.value.set_move_col(Some(cx));
         let c = self.value.set_cursor((cx, cy), extend_selection);
         let s = self.scroll_cursor_to_visible();
         c || s
@@ -301,6 +359,7 @@ impl TextAreaState {
 
         let cx = self.value.line_width(cy);
 
+        self.value.set_move_col(Some(cx));
         let c = self.value.set_cursor((cx, cy), extend_selection);
         let s = self.scroll_cursor_to_visible();
         c || s
@@ -521,8 +580,8 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for TextAreaState 
                 ct_event!(keycode press Right) => self.move_right(1, false),
                 ct_event!(keycode press Up) => self.move_up(1, false),
                 ct_event!(keycode press Down) => self.move_down(1, false),
-                ct_event!(keycode press PageUp) => self.scroll_up(self.vertical_page()),
-                ct_event!(keycode press PageDown) => self.scroll_down(self.vertical_page()),
+                ct_event!(keycode press PageUp) => self.move_up(self.vertical_page(), false),
+                ct_event!(keycode press PageDown) => self.move_down(self.vertical_page(), false),
                 ct_event!(keycode press Home) => self.move_to_line_start(false),
                 ct_event!(keycode press End) => self.move_to_line_end(false),
 
@@ -560,8 +619,16 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for TextAreaState 
                     self.scroll_right(max(self.horizontal_page() / 5, 1))
                 }
 
-                // ct_event!(keycode press SHIFT-Left) => self.move_to_prev(true),
-                // ct_event!(keycode press SHIFT-Right) => self.move_to_next(true),
+                ct_event!(keycode press SHIFT-Left) => self.move_left(1, true),
+                ct_event!(keycode press SHIFT-Right) => self.move_right(1, true),
+                ct_event!(keycode press SHIFT-Up) => self.move_up(1, true),
+                ct_event!(keycode press SHIFT-Down) => self.move_down(1, true),
+                ct_event!(keycode press SHIFT-PageUp) => self.move_up(self.vertical_page(), true),
+                ct_event!(keycode press SHIFT-PageDown) => {
+                    self.move_down(self.vertical_page(), true)
+                }
+                ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true),
+                ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true),
                 // ct_event!(keycode press CONTROL_SHIFT-Left) => {
                 //     let pos = self.prev_word_boundary();
                 //     self.set_cursor(pos, true);
@@ -570,9 +637,7 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for TextAreaState 
                 //     let pos = self.next_word_boundary();
                 //     self.set_cursor(pos, true);
                 // }
-                // ct_event!(keycode press SHIFT-Home) => self.set_cursor(0, true),
-                // ct_event!(keycode press SHIFT-End) => self.set_cursor(self.len(), true),
-                // ct_event!(key press CONTROL-'a') => self.set_selection(0, self.len()),
+                ct_event!(key press CONTROL-'a') => self.select_all(),
                 // ct_event!(keycode press Backspace) => self.delete_prev_char(),
                 // ct_event!(keycode press Delete) => self.delete_next_char(),
                 // ct_event!(keycode press CONTROL-Backspace) => {
@@ -694,6 +759,7 @@ mod graphemes {
     use ropey::RopeSlice;
     use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 
+    /// Length as grapheme count.
     pub(crate) fn rope_len(r: RopeSlice<'_>) -> usize {
         let it = RopeGraphemes::new(r);
         it.filter(|c| c != "\n").count()
@@ -771,18 +837,20 @@ mod graphemes {
 
 pub mod core {
     use crate::textarea::graphemes::rope_len;
-    use log::debug;
     use ropey::iter::Lines;
     use ropey::{Rope, RopeSlice};
-    use std::cmp::min;
+    use std::cmp::{min, Ordering};
+    use std::fmt::{Debug, Formatter};
     use std::iter::Skip;
-    use std::ops::Range;
 
     pub use crate::textarea::graphemes::RopeGraphemes;
 
+    /// Core for text editing.
     #[derive(Debug, Default, Clone)]
     pub struct InputCore {
         value: Rope,
+
+        styles: StyleMap,
 
         /// Scroll offset
         offset: (usize, usize),
@@ -795,42 +863,204 @@ pub mod core {
         anchor: (usize, usize),
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+    /// Range for text ranges.
+    #[derive(Default, PartialEq, Eq, Clone, Copy)]
     pub struct TextRange {
         pub start: (usize, usize),
         pub end: (usize, usize),
     }
 
-    impl TextRange {
-        pub fn new(start: (usize, usize), end: (usize, usize)) -> Self {
-            TextRange { start, end }
-        }
-
-        pub fn contains(&self, pos: (usize, usize)) -> bool {
-            let (px, py) = pos;
-            let (sx, sy) = self.start;
-            let (ex, ey) = self.end;
-
-            if py >= sy && py <= ey {
-                if py == sy && py == ey {
-                    px >= sx && px < ex
-                } else if py == sy {
-                    px >= sx
-                } else if py == ey {
-                    px < ex
-                } else {
-                    true
-                }
-            } else {
-                false
-            }
-        }
+    #[derive(Debug, Default, Clone)]
+    struct StyleMap {
+        /// Vec of (range, style-idx)
+        styles: Vec<(TextRange, usize)>,
     }
 
     #[derive(Debug)]
     pub struct ScrolledIter<'a> {
         lines: Lines<'a>,
         offset: usize,
+    }
+
+    impl Debug for TextRange {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "TextRange  {}|{}-{}|{}",
+                self.start.0, self.start.1, self.end.0, self.end.1
+            )
+        }
+    }
+
+    impl TextRange {
+        /// New text range.
+        ///
+        /// Panic
+        /// Panics if start > end.
+        pub fn new(start: (usize, usize), end: (usize, usize)) -> Self {
+            assert!(start <= end);
+            TextRange { start, end }
+        }
+
+        /// Start position
+        pub fn start(&self) -> (usize, usize) {
+            self.start
+        }
+
+        /// End position
+        pub fn end(&self) -> (usize, usize) {
+            self.end
+        }
+
+        /// Range contains the given position.
+        pub fn contains(&self, pos: (usize, usize)) -> bool {
+            self.ordering(pos) == Ordering::Equal
+        }
+
+        /// The given position is before/within/after the range.
+        pub fn ordering(&self, pos: (usize, usize)) -> Ordering {
+            let (sx, sy) = self.start;
+            let (ex, ey) = self.end;
+            let (x, y) = pos;
+
+            if y < sy {
+                Ordering::Greater
+            } else if y == sy {
+                if y < ey {
+                    if x < sx {
+                        Ordering::Greater
+                    } else {
+                        Ordering::Equal
+                    }
+                } else if y == ey {
+                    if x < sx {
+                        Ordering::Greater
+                    } else if x < ex {
+                        Ordering::Equal
+                    } else {
+                        Ordering::Less
+                    }
+                } else {
+                    // ey < sy
+                    unreachable!()
+                }
+            } else {
+                if y < ey {
+                    Ordering::Equal
+                } else if y == ey {
+                    if x < ex {
+                        Ordering::Equal
+                    } else {
+                        Ordering::Less
+                    }
+                } else {
+                    Ordering::Less
+                }
+            }
+        }
+    }
+
+    // This needs its own impl, because the order is exactly wrong.
+    // For any sane range I'd need (row,col) but what I got is (col,row).
+    // Need this to conform with the rest of ratatui ...
+    impl PartialOrd for TextRange {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            let (sx, sy) = self.start;
+            let (ex, ey) = self.end;
+            let (osx, osy) = other.start;
+            let (oex, oey) = other.end;
+
+            if sy < osy {
+                Some(Ordering::Less)
+            } else if sy > osy {
+                Some(Ordering::Greater)
+            } else {
+                if sx < osx {
+                    Some(Ordering::Less)
+                } else if sx > osx {
+                    Some(Ordering::Greater)
+                } else {
+                    if ey < oey {
+                        Some(Ordering::Less)
+                    } else if ey > oey {
+                        Some(Ordering::Greater)
+                    } else {
+                        if ex < oex {
+                            Some(Ordering::Less)
+                        } else if ex > oex {
+                            Some(Ordering::Greater)
+                        } else {
+                            Some(Ordering::Equal)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    impl Ord for TextRange {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.partial_cmp(other).expect("order")
+        }
+    }
+
+    impl StyleMap {
+        /// New mapping
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        /// Remove all styles.
+        pub fn clear_styles(&mut self) {
+            self.styles.clear();
+        }
+
+        /// Add a text-style for a range.
+        ///
+        /// The same range can be added again with a different style.
+        /// Overlapping regions get the merged style.
+        pub fn add_style(&mut self, range: TextRange, style: usize) {
+            let stylemap = (range, style);
+            match self.styles.binary_search(&stylemap) {
+                Ok(_) => {
+                    // noop
+                }
+                Err(idx) => {
+                    self.styles.insert(idx, stylemap);
+                }
+            }
+        }
+
+        /// Find all styles for the given position.
+        ///
+        pub fn styles_at(&self, pos: (usize, usize), result: &mut Vec<usize>) {
+            match self.styles.binary_search_by(|v| v.0.ordering(pos)) {
+                Ok(mut i) => {
+                    // binary-search found *some* matching style, we need all of them.
+                    // this finds the first one.
+                    loop {
+                        if i == 0 {
+                            break;
+                        }
+                        if !self.styles[i - 1].0.contains(pos) {
+                            break;
+                        }
+                        i -= 1;
+                    }
+
+                    // collect all matching styles.
+                    result.clear();
+                    for i in i..self.styles.len() {
+                        if self.styles[i].0.contains(pos) {
+                            result.push(self.styles[i].1);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                Err(_) => result.clear(),
+            }
+        }
     }
 
     impl<'a> Iterator for ScrolledIter<'a> {
@@ -846,6 +1076,11 @@ pub mod core {
     }
 
     impl InputCore {
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        /// Set the text offset as (col,row).
         pub fn set_offset(&mut self, mut offset: (usize, usize)) -> bool {
             let old_offset = self.offset;
 
@@ -858,20 +1093,34 @@ pub mod core {
             self.offset != old_offset
         }
 
+        /// Text offset as (col,row)
+        #[inline]
         pub fn offset(&self) -> (usize, usize) {
             self.offset
         }
 
+        /// Extra column information for cursor movement.
+        /// The cursor position is capped to the current line length, so if you
+        /// move up one row, you might end at a position left of the current column.
+        /// If you move up once more you want to return to the original position.
+        /// That's what is stored here.
+        #[inline]
         pub fn set_move_col(&mut self, col: Option<usize>) {
             self.move_col = col;
         }
 
+        /// Extra column information for cursor movement.
+        #[inline]
         pub fn move_col(&mut self) -> Option<usize> {
             self.move_col
         }
 
+        /// Set the cursor position.
+        /// The value is capped to the number of text lines and the line-width.
+        /// Returns true, if the cursor actually changed.
         pub fn set_cursor(&mut self, mut cursor: (usize, usize), extend_selection: bool) -> bool {
             let old_cursor = self.cursor;
+            let old_anchor = self.anchor;
 
             let (mut cx, mut cy) = cursor;
             cy = min(cy, self.len_lines() - 1);
@@ -885,28 +1134,68 @@ pub mod core {
                 self.anchor = cursor;
             }
 
-            old_cursor != self.cursor
+            old_cursor != self.cursor || old_anchor != self.anchor
         }
 
+        /// Cursor position.
+        #[inline]
         pub fn cursor(&self) -> (usize, usize) {
             self.cursor
         }
 
+        /// Selection anchor.
+        #[inline]
         pub fn anchor(&self) -> (usize, usize) {
             self.anchor
         }
 
+        /// Set the text.
+        /// Resets the selection and any styles.
         pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
             self.value = Rope::from_str(s.as_ref());
             self.offset = (0, 0);
             self.cursor = (0, 0);
             self.anchor = (0, 0);
+            self.move_col = None;
+            self.styles.clear_styles();
         }
 
+        /// Text value.
+        #[inline]
         pub fn value(&self) -> String {
             String::from(&self.value)
         }
 
+        /// Clear styles.
+        #[inline]
+        pub fn clear_styles(&mut self) {
+            self.styles.clear_styles();
+        }
+
+        /// Add a style for the given range.
+        ///
+        /// What is given here is the index into the Vec with the actual Styles.
+        /// Those are set at the widget.
+        #[inline]
+        pub fn add_style(&mut self, range: TextRange, style: usize) {
+            self.styles.add_style(range, style);
+        }
+
+        /// Style map.
+        #[inline]
+        pub fn styles(&self) -> &[(TextRange, usize)] {
+            &self.styles.styles
+        }
+
+        /// Finds all styles for the given position.
+        ///
+        /// Returns the indexes into the style vec.
+        #[inline]
+        pub fn styles_at(&self, pos: (usize, usize), result: &mut Vec<usize>) {
+            self.styles.styles_at(pos, result)
+        }
+
+        /// Returns a line as an iterator over the graphemes for the line.
         pub fn line(&self, n: usize) -> RopeGraphemes<'_> {
             let line = self.value.lines_at(n).next();
             if let Some(line) = line {
@@ -916,6 +1205,7 @@ pub mod core {
             }
         }
 
+        /// Line width as grapheme count.
         pub fn line_width(&self, n: usize) -> usize {
             let line = self.value.lines_at(n).next();
             if let Some(line) = line {
@@ -925,22 +1215,53 @@ pub mod core {
             }
         }
 
+        /// Number of lines.
+        #[inline]
         pub fn len_lines(&self) -> usize {
             self.value.len_lines()
         }
 
+        /// Reset.
+        #[inline]
         pub fn clear(&mut self) {
             self.set_value("");
         }
 
+        /// Empty.
+        #[inline]
         pub fn is_empty(&self) -> bool {
             self.value.len_bytes() == 0
         }
 
+        /// Any text selection.
+        #[inline]
         pub fn has_selection(&self) -> bool {
             self.anchor != self.cursor
         }
 
+        #[inline]
+        pub fn set_selection(&mut self, range: TextRange) -> bool {
+            let old_selection = self.selection();
+
+            self.set_cursor(range.start, false);
+            self.set_cursor(range.end, true);
+
+            old_selection != self.selection()
+        }
+
+        #[inline]
+        pub fn select_all(&mut self) -> bool {
+            let old_selection = self.selection();
+
+            self.set_cursor((0, 0), false);
+            let last = self.len_lines() - 1;
+            let last_width = self.line_width(last);
+            self.set_cursor((last_width, last), true);
+
+            old_selection != self.selection()
+        }
+
+        /// Returns the selection as TextRange.
         pub fn selection(&self) -> TextRange {
             let selection = if self.cursor.1 < self.anchor.1 {
                 TextRange {
@@ -969,7 +1290,8 @@ pub mod core {
             selection
         }
 
-        /// Iterate over the text, shifted by the offset
+        /// Iterate over the text, shifted by the offset.
+        #[inline]
         pub fn iter_scrolled(&self) -> ScrolledIter<'_> {
             let Some(l) = self.value.get_lines_at(self.offset.1) else {
                 unreachable!()

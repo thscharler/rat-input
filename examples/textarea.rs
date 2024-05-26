@@ -7,10 +7,12 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+use log::debug;
 use rat_event::ct_event;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
 use rat_input::statusline::{StatusLine, StatusLineState};
+use rat_input::textarea::core::TextRange;
 use rat_input::textarea::{TextArea, TextAreaState};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -31,6 +33,21 @@ fn main() -> Result<(), anyhow::Error> {
         status: Default::default(),
     };
     state.textarea.value.set_value(DATA1);
+
+    state.textarea.add_style(TextRange::new((0, 0), (13, 0)), 0);
+    state.textarea.add_style(TextRange::new((0, 1), (13, 1)), 0);
+    state.textarea.add_style(TextRange::new((4, 3), (17, 3)), 0);
+    state
+        .textarea
+        .add_style(TextRange::new((31, 44), (44, 44)), 0);
+
+    // overlapping styles
+    state
+        .textarea
+        .add_style(TextRange::new((30, 7), (42, 7)), 0);
+    state
+        .textarea
+        .add_style(TextRange::new((37, 7), (41, 7)), 1);
 
     run_ui(&mut data, &mut state)
 }
@@ -131,7 +148,7 @@ fn repaint_tui(frame: &mut Frame<'_>, data: &mut Data, state: &mut State) {
     let status1 = StatusLine::new()
         .layout([
             Constraint::Fill(1),
-            Constraint::Length(17),
+            Constraint::Length(27),
             Constraint::Length(17),
             Constraint::Length(17),
         ])
@@ -193,14 +210,37 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
     ])
     .split(l1[1]);
 
-    let text = TextArea::new().style(Style::default().black().on_dark_gray());
+    let text = TextArea::new()
+        .style(Style::default().black().on_dark_gray())
+        .text_style([Style::new().red(), Style::new().underlined()]);
     frame.render_stateful_widget(text, l2[1], &mut state.textarea);
 
+    let ccursor = state.textarea.selection();
     if let Some(cursor) = state.textarea.screen_cursor() {
         frame.set_cursor(cursor.x, cursor.y);
-        state.status.status(1, format!("{}|{}", cursor.x, cursor.y));
+        state.status.status(
+            1,
+            format!(
+                "{}|{} - {}|{} -> V{}|{}",
+                ccursor.start().0,
+                ccursor.start().1,
+                ccursor.end().0,
+                ccursor.end().1,
+                cursor.x,
+                cursor.y
+            ),
+        );
     } else {
-        state.status.status(1, "none");
+        state.status.status(
+            1,
+            format!(
+                "{}|{} - {}|{} -> None",
+                ccursor.start().0,
+                ccursor.start().1,
+                ccursor.end().0,
+                ccursor.end().1,
+            ),
+        );
     }
 
     let menu1 = MenuLine::new()
