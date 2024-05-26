@@ -1,5 +1,6 @@
 use rat_input::textarea::core::{InputCore, TextRange};
 use std::cmp::Ordering;
+use unicode_width::UnicodeWidthStr;
 
 fn insert(v: &mut Vec<TextRange>, r: TextRange) {
     match v.binary_search(&r) {
@@ -182,4 +183,10 @@ fn test_stylemap() {
     let mut r = Vec::new();
     txt.styles_at((37, 7), &mut r);
     assert_eq!(r.len(), 2);
+}
+
+#[test]
+fn cw() {
+    let t = "👩🏻";
+    dbg!(t.width());
 }

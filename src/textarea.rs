@@ -3,6 +3,7 @@
 use crate::_private::NonExhaustive;
 use crate::textarea::core::{RopeGraphemes, TextRange};
 use crate::util::MouseFlags;
+use crossterm::event::Event;
 use log::debug;
 use rat_event::util::Outcome;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
@@ -13,6 +14,7 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, StatefulWidget};
 use std::cmp::{max, min};
 use std::collections::HashMap;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Default, Clone)]
 pub struct TextArea<'a> {
@@ -98,24 +100,31 @@ impl<'a> StatefulWidget for TextArea<'a> {
         let mut line_iter = state.value.iter_scrolled();
         for row in 0..area.height {
             if let Some(mut line) = line_iter.next() {
-                //
-                for col in 0..area.width {
+                let mut col = 0;
+                loop {
+                    if col >= area.width {
+                        break;
+                    }
+
                     let cell = buf.get_mut(area.x + col, area.y + row);
-                    if let Some(ch) = line.next() {
+
+                    let tmp_str;
+                    let ch = if let Some(ch) = line.next() {
                         if let Some(ch) = ch.as_str() {
                             // would do a newline on the console.
                             if ch != "\n" {
-                                cell.set_symbol(ch);
+                                ch
                             } else {
-                                cell.set_symbol(" ");
+                                " "
                             }
                         } else {
-                            let s = String::from(ch);
-                            cell.set_symbol(s.as_str());
+                            tmp_str = ch.to_string();
+                            tmp_str.as_str()
                         }
                     } else {
-                        cell.set_symbol(" ");
-                    }
+                        " "
+                    };
+                    cell.set_symbol(ch);
 
                     // text based
                     let (ox, oy) = state.offset();
@@ -138,6 +147,8 @@ impl<'a> StatefulWidget for TextArea<'a> {
                         style = style.patch(select_style);
                     };
                     cell.set_style(style);
+
+                    col += ch.width() as u16;
                 }
             } else {
                 for col in 0..area.width {
@@ -260,6 +271,11 @@ impl TextAreaState {
     #[inline]
     pub fn styles_at(&self, pos: (usize, usize), result: &mut Vec<usize>) {
         self.value.styles_at(pos, result)
+    }
+
+    pub fn insert_char(&mut self, c: char) -> bool {
+        self.value.insert_char(c);
+        true
     }
 
     pub fn move_left(&mut self, n: usize, extend_selection: bool) -> bool {
@@ -404,6 +420,50 @@ impl TextAreaState {
         self.value.set_cursor((cx, cy), extend_selection)
     }
 
+    /// Converts from a widget relative screen coordinate to a grapheme index.
+    /// Row is a row-index into the value, not a screen-row.
+    /// x is the relative screen position.
+    pub fn from_screen_col(&self, row: usize, x: usize) -> usize {
+        let (mut cx, cy) = (0usize, row);
+        let (ox, _oy) = self.value.offset();
+
+        let mut test = 0;
+        for c in self.line(cy).skip(ox) {
+            if test >= x {
+                break;
+            }
+
+            test += if let Some(c) = c.as_str() {
+                c.width()
+            } else {
+                c.to_string().width()
+            };
+
+            cx += 1;
+        }
+
+        cx + ox
+    }
+
+    /// Converts a grapheme based position to a screen position relative to the
+    /// widget area.
+    pub fn to_screen_col(&self, pos: (usize, usize)) -> u16 {
+        let (px, py) = pos;
+        let (ox, _oy) = self.value.offset();
+
+        let mut sx = 0;
+        for c in self.line(py).skip(ox).take(px - ox) {
+            sx += if let Some(c) = c.as_str() {
+                c.width()
+            } else {
+                c.to_string().width()
+            };
+        }
+
+        sx as u16
+    }
+
+    /// Cursor position on the screen.
     pub fn screen_cursor(&self) -> Option<Position> {
         let (cx, cy) = self.value.cursor();
         let (ox, oy) = self.value.offset();
@@ -419,21 +479,24 @@ impl TextAreaState {
             } else if cx > ox + self.inner.width as usize {
                 None
             } else {
-                let sx = cx - ox;
-                Some(Position::new(
-                    self.inner.x + sx as u16,
-                    self.inner.y + sy as u16,
-                ))
+                let mut sx = self.to_screen_col((cx, cy));
+
+                Some(Position::new(self.inner.x + sx, self.inner.y + sy as u16))
             }
         }
     }
 
+    /// Set the cursor position from screen coordinates.
     pub fn set_screen_cursor(&mut self, cursor: (isize, isize), extend_selection: bool) -> bool {
         let (scx, scy) = cursor;
         let (ox, oy) = self.value.offset();
 
-        let cx = max(ox as isize + scx, 0) as usize;
         let cy = max(oy as isize + scy, 0) as usize;
+        let cx = if scx < 0 {
+            max(ox as isize + scx, 0) as usize
+        } else {
+            self.from_screen_col(cy, scx as usize)
+        };
 
         let c = self.set_cursor((cx, cy), extend_selection);
         let s = self.scroll_cursor_to_visible();
@@ -544,6 +607,8 @@ impl TextAreaState {
         self.set_horizontal_offset(self.horizontal_offset() + n)
     }
 
+    /// Scroll that the cursor is visible.
+    /// All move-fn do this automatically.
     pub fn scroll_cursor_to_visible(&mut self) -> bool {
         let old_offset = self.value.offset();
 
@@ -653,7 +718,14 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for TextAreaState 
                 // ct_event!(keycode press CONTROL_SHIFT-Delete) => {
                 //     self.remove(self.cursor()..self.len())
                 // }
-                // ct_event!(key press c) | ct_event!(key press SHIFT-c) => self.insert_char(*c),
+                ct_event!(key press c)
+                | ct_event!(key press SHIFT-c)
+                | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c),
+                ct_event!(keycode press Enter) => self.insert_char('\n'),
+                Event::Key(k) => {
+                    debug!("key {:?}", k);
+                    break 'f Outcome::NotUsed;
+                }
                 _ => break 'f Outcome::NotUsed,
             };
 
@@ -833,15 +905,86 @@ mod graphemes {
             }
         }
     }
+
+    /// An implementation of a graphemes iterator, for iterating over
+    /// the graphemes of a RopeSlice.
+    #[derive(Debug)]
+    pub struct RopeGraphemesIdx<'a> {
+        text: RopeSlice<'a>,
+        chunks: Chunks<'a>,
+        cur_chunk: &'a str,
+        cur_chunk_start: usize,
+        cursor: GraphemeCursor,
+    }
+
+    impl<'a> RopeGraphemesIdx<'a> {
+        pub fn new(slice: RopeSlice<'a>) -> RopeGraphemesIdx<'a> {
+            let mut chunks = slice.chunks();
+            let first_chunk = chunks.next().unwrap_or("");
+            RopeGraphemesIdx {
+                text: slice,
+                chunks,
+                cur_chunk: first_chunk,
+                cur_chunk_start: 0,
+                cursor: GraphemeCursor::new(0, slice.len_bytes(), true),
+            }
+        }
+    }
+
+    impl<'a> Iterator for RopeGraphemesIdx<'a> {
+        type Item = (usize, RopeSlice<'a>);
+
+        fn next(&mut self) -> Option<(usize, RopeSlice<'a>)> {
+            let a = self.cursor.cur_cursor();
+            let b;
+            loop {
+                match self
+                    .cursor
+                    .next_boundary(self.cur_chunk, self.cur_chunk_start)
+                {
+                    Ok(None) => {
+                        return None;
+                    }
+                    Ok(Some(n)) => {
+                        b = n;
+                        break;
+                    }
+                    Err(GraphemeIncomplete::NextChunk) => {
+                        self.cur_chunk_start += self.cur_chunk.len();
+                        self.cur_chunk = self.chunks.next().unwrap_or("");
+                    }
+                    Err(GraphemeIncomplete::PreContext(idx)) => {
+                        let (chunk, byte_idx, _, _) =
+                            self.text.chunk_at_byte(idx.saturating_sub(1));
+                        self.cursor.provide_context(chunk, byte_idx);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            if a < self.cur_chunk_start {
+                let a_char = self.text.byte_to_char(a);
+                let b_char = self.text.byte_to_char(b);
+
+                Some((a, self.text.slice(a_char..b_char)))
+            } else {
+                let a2 = a - self.cur_chunk_start;
+                let b2 = b - self.cur_chunk_start;
+                Some((a, (&self.cur_chunk[a2..b2]).into()))
+            }
+        }
+    }
 }
 
 pub mod core {
-    use crate::textarea::graphemes::rope_len;
+    use crate::textarea::graphemes::{rope_len, RopeGraphemesIdx};
+    use log::debug;
     use ropey::iter::Lines;
     use ropey::{Rope, RopeSlice};
     use std::cmp::{min, Ordering};
     use std::fmt::{Debug, Formatter};
     use std::iter::Skip;
+    use std::slice::IterMut;
 
     pub use crate::textarea::graphemes::RopeGraphemes;
 
@@ -1031,6 +1174,32 @@ pub mod core {
             }
         }
 
+        /// Find all styles
+        pub fn styles_after_mut(
+            &mut self,
+            pos: (usize, usize),
+        ) -> Skip<IterMut<(TextRange, usize)>> {
+            let first = match self.styles.binary_search_by(|v| v.0.ordering(pos)) {
+                Ok(mut i) => {
+                    // binary-search found *some* matching style, we need all of them.
+                    // this finds the first one.
+                    loop {
+                        if i == 0 {
+                            break;
+                        }
+                        if !self.styles[i - 1].0.contains(pos) {
+                            break;
+                        }
+                        i -= 1;
+                    }
+                    i
+                }
+                Err(i) => i,
+            };
+
+            self.styles.iter_mut().skip(first)
+        }
+
         /// Find all styles for the given position.
         ///
         pub fn styles_at(&self, pos: (usize, usize), result: &mut Vec<usize>) {
@@ -1205,6 +1374,16 @@ pub mod core {
             }
         }
 
+        /// Returns a line as an iterator over the graphemes for the line.
+        pub fn line_idx(&self, n: usize) -> RopeGraphemesIdx<'_> {
+            let line = self.value.lines_at(n).next();
+            if let Some(line) = line {
+                RopeGraphemesIdx::new(line)
+            } else {
+                RopeGraphemesIdx::new(RopeSlice::from(""))
+            }
+        }
+
         /// Line width as grapheme count.
         pub fn line_width(&self, n: usize) -> usize {
             let line = self.value.lines_at(n).next();
@@ -1300,6 +1479,49 @@ pub mod core {
                 lines: l,
                 offset: self.offset.0,
             }
+        }
+
+        fn byte_of(&self, pos: (usize, usize)) -> usize {
+            let line_byte = self.value.line_to_byte(pos.1);
+            let mut it = self.line_idx(pos.1);
+            for (col, (byte, _cc)) in it.enumerate() {
+                if pos.0 == col {
+                    return line_byte + byte;
+                }
+            }
+            panic!("byte_of");
+        }
+
+        fn char_of(&self, pos: (usize, usize)) -> usize {
+            let byte_pos = self.byte_of(pos);
+            self.value.byte_to_char(byte_pos)
+        }
+
+        pub fn insert_char(&mut self, c: char) {
+            let char_pos = self.char_of(self.cursor);
+            self.value.insert_char(char_pos, c);
+
+            for (r, _) in self.styles.styles_after_mut(self.cursor) {
+                if r.start.1 == self.cursor.1 {
+                    if r.start.0 >= self.cursor.0 {
+                        r.start.0 += 1;
+                    }
+                }
+                if r.end.1 == self.cursor.1 {
+                    if r.end.0 >= self.cursor.0 {
+                        r.end.0 += 1;
+                    }
+                }
+            }
+
+            if self.anchor.0 >= self.cursor.0 {
+                self.anchor.0 += 1;
+            }
+            self.cursor.0 += 1;
+        }
+
+        pub fn insert_newline(&mut self) {
+            let char_pos = self.char_of(self.cursor);
         }
     }
 }

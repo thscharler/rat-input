@@ -47,6 +47,7 @@ chrono = { version = "0.4", features = ["unstable-locales"] }
 crossterm = "0.27"
 ratatui = { version = "0.26", features = ["unstable-widget-ref", "unstable-rendered-line-info"] }
 unicode-segmentation = "1.11"
+unicode-width = "0.1.12"
 rust_decimal = "1.34"
 rust_decimal_macros = "1.34"
 pure-rust-locales = "0.8"
