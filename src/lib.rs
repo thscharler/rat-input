@@ -10,6 +10,7 @@ pub mod masked_input;
 pub mod menuline;
 pub mod msgdialog;
 pub mod statusline;
+pub mod textarea;
 pub mod util;
 
 pub use pure_rust_locales::Locale;
