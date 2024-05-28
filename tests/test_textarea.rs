@@ -154,3 +154,12 @@ fn test_byte_pos() {
 
     assert_eq!(core.byte_pos(0), Some((0, 0)));
 }
+
+
+#[test]
+fn test_ranges() {
+
+
+
+
+}

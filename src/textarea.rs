@@ -1,8 +1,10 @@
-#![allow(dead_code)]
-
+//!
+//! A text-area with text-styling abilities.
+//!
 use crate::_private::NonExhaustive;
 use crate::textarea::core::{RopeGraphemes, TextRange};
 use crate::util::MouseFlags;
+use log::debug;
 use rat_event::util::Outcome;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
@@ -10,11 +12,44 @@ use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{BlockExt, Stylize};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, StatefulWidget, Widget};
-use ropey::RopeSlice;
+use ropey::{Rope, RopeSlice};
 use std::cmp::{max, min};
-use unicode_width::UnicodeWidthStr;
 
 /// Text area widget.
+///
+/// Backend used is [ropey](https://docs.rs/ropey/latest/ropey/), so large
+/// texts are no problem. Editing time increases with the number of
+/// styles applied. Everything below a million styles should be fine.
+///
+/// For emoji support this uses
+/// [unicode_display_width](https://docs.rs/unicode-display-width/latest/unicode_display_width/index.html)
+/// which helps with those double-width emojis. Input of emojis
+/// strongly depends on the terminal. It may or may not work.
+/// And even with display there are sometimes strange glitches
+/// that I haven't found yet.
+///
+/// Keyboard and mouse are implemented for crossterm, but it should be
+/// trivial to extend to other event-types. Every interaction is available
+/// as function on the state.
+///
+/// Scrolling doesn't depend on the cursor, but the editing and move
+/// functions take care that the cursor stays visible.
+///
+/// Wordwrap is not available. For display only use
+/// [Paragraph](https://docs.rs/ratatui/latest/ratatui/widgets/struct.Paragraph.html), as
+/// for editing: why?
+///
+/// You can directly access the underlying Rope for readonly purposes, and
+/// conversion from/to byte/char positions are available. That should probably be
+/// enough to write a parser that generates some styling.
+///
+/// The cursor must set externally on the ratatui Frame as usual.
+/// [screen_cursor](TextAreaState::screen_cursor) gives you the correct value.
+/// There is the inverse too [set_screen_cursor](TextAreaState::set_screen_cursor)
+/// For more interactions you can use [from_screen_col](TextAreaState::from_screen_col),
+/// and [to_screen_col](TextAreaState::to_screen_col). They calculate everything,
+/// even in the presence of more complex graphemes and those double-width emojis.
+///
 #[derive(Debug, Default, Clone)]
 pub struct TextArea<'a> {
     block: Option<Block<'a>>,
@@ -26,6 +61,7 @@ pub struct TextArea<'a> {
 }
 
 /// State for the text-area.
+///
 #[derive(Debug, Clone)]
 pub struct TextAreaState {
     /// Complete area.
@@ -114,12 +150,11 @@ impl<'a> StatefulWidget for TextArea<'a> {
         for row in 0..area.height {
             if let Some(mut line) = line_iter.next() {
                 let mut col = 0;
+                let mut cx = 0;
                 loop {
                     if col >= area.width {
                         break;
                     }
-
-                    let cell = buf.get_mut(area.x + col, area.y + row);
 
                     let tmp_str;
                     let ch = if let Some(ch) = line.next() {
@@ -137,11 +172,10 @@ impl<'a> StatefulWidget for TextArea<'a> {
                     } else {
                         " "
                     };
-                    cell.set_symbol(ch);
 
                     // text based
                     let (ox, oy) = state.offset();
-                    let tx = col as usize + ox;
+                    let tx = cx as usize + ox;
                     let ty = row as usize + oy;
 
                     let mut style = Style::default();
@@ -159,9 +193,21 @@ impl<'a> StatefulWidget for TextArea<'a> {
                     if selection.contains((tx, ty)) {
                         style = style.patch(select_style);
                     };
+
+                    let cell = buf.get_mut(area.x + col, area.y + row);
+                    cell.set_symbol(ch);
                     cell.set_style(style);
 
-                    col += ch.width() as u16;
+                    // extra cells for wide chars.
+                    let ww = unicode_display_width::width(ch) as u16;
+                    for x in 1..ww {
+                        let cell = buf.get_mut(area.x + col + x, area.y + row);
+                        cell.set_symbol(" ");
+                        cell.set_style(style);
+                    }
+
+                    col += ww;
+                    cx += 1;
                 }
             } else {
                 for col in 0..area.width {
@@ -229,6 +275,13 @@ impl TextAreaState {
     #[inline]
     pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
         self.value.set_value(s);
+    }
+
+    /// Set the text value as a Rope.
+    /// Resets all internal state.
+    #[inline]
+    pub fn set_rope(&mut self, s: Rope) {
+        self.value.set_rope(s);
     }
 
     /// Text value
@@ -387,12 +440,6 @@ impl TextAreaState {
         let Some(c_line_width) = self.value.line_width(cy) else {
             panic!("invalid_cursor: {:?} value {:?}", (cx, cy), self.value);
         };
-
-        if cx == c_line_width {
-            if cy == self.value.len_lines() - 1 {
-                return false;
-            }
-        }
 
         if self.value.has_selection() {
             self.value.remove(self.value.selection());
@@ -732,9 +779,9 @@ impl TextAreaState {
             }
 
             test += if let Some(c) = c.as_str() {
-                c.width()
+                unicode_display_width::width(c) as usize
             } else {
-                c.to_string().width()
+                unicode_display_width::width(c.to_string().as_str()) as usize
             };
 
             cx += 1;
@@ -755,9 +802,9 @@ impl TextAreaState {
         };
         for c in line.skip(ox).filter(|v| v != "\n").take(px - ox) {
             sx += if let Some(c) = c.as_str() {
-                c.width()
+                unicode_display_width::width(c) as usize
             } else {
-                c.to_string().width()
+                unicode_display_width::width(c.to_string().as_str()) as usize
             };
         }
 
@@ -788,6 +835,10 @@ impl TextAreaState {
     }
 
     /// Set the cursor position from screen coordinates.
+    ///
+    /// The cursor positions are relative to the inner rect.
+    /// They may be negative too, this allows setting the cursor
+    /// to a position that is currently scrolled away.
     pub fn set_screen_cursor(&mut self, cursor: (i16, i16), extend_selection: bool) -> bool {
         let (scx, scy) = (cursor.0 as isize, cursor.1 as isize);
         let (ox, oy) = self.value.offset();
@@ -1182,6 +1233,44 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
     }
 }
 
+/// Handle all events.
+/// Text events are only processed if focus is true.
+/// Mouse events are processed if they are in range.
+pub fn handle_events(
+    state: &mut TextAreaState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
+    if focus {
+        state.handle(event, FocusKeys)
+    } else {
+        state.handle(event, MouseOnly)
+    }
+}
+
+/// Handle only navigation events.
+/// Text events are only processed if focus is true.
+/// Mouse events are processed if they are in range.
+pub fn handle_readonly_events(
+    state: &mut TextAreaState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
+    if focus {
+        state.handle(event, ReadOnly)
+    } else {
+        state.handle(event, MouseOnly)
+    }
+}
+
+/// Handle only mouse-events.
+pub fn handle_mouse_events(
+    state: &mut TextAreaState,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
+    state.handle(event, MouseOnly)
+}
+
 pub mod graphemes {
     use ropey::iter::Chunks;
     use ropey::RopeSlice;
@@ -1334,7 +1423,6 @@ pub mod graphemes {
 
 pub mod core {
     use crate::textarea::graphemes::{rope_len, RopeGraphemesIdx};
-    use log::debug;
     use ropey::iter::Lines;
     use ropey::{Rope, RopeSlice};
     use std::cmp::{min, Ordering};
@@ -1404,32 +1492,38 @@ pub mod core {
         }
 
         /// Start position
+        #[inline]
         pub fn start(&self) -> (usize, usize) {
             self.start
         }
 
         /// End position
+        #[inline]
         pub fn end(&self) -> (usize, usize) {
             self.end
         }
 
         /// Empty range
+        #[inline]
         pub fn is_empty(&self) -> bool {
             self.start == self.end
         }
 
         /// Range contains the given position.
+        #[inline]
         pub fn contains(&self, pos: (usize, usize)) -> bool {
             self.ordering(pos) == Ordering::Equal
         }
 
         /// Range contains the other range.
+        #[inline]
         pub fn contains_range(&self, range: TextRange) -> bool {
             self.ordering(range.start) == Ordering::Equal
                 && self.ordering_inclusive(range.end) == Ordering::Equal
         }
 
         /// What place is the range respective to the given position.
+        #[inline]
         pub fn ordering(&self, pos: (usize, usize)) -> Ordering {
             // reverse the args, then it works.
             let start = (self.start.1, self.start.0);
@@ -1448,6 +1542,7 @@ pub mod core {
 
         /// What place is the range respective to the given position.
         /// This one includes the `range.end`.
+        #[inline]
         pub fn ordering_inclusive(&self, pos: (usize, usize)) -> Ordering {
             // reverse the args, then it works.
             let start = (self.start.1, self.start.0);
@@ -1464,12 +1559,29 @@ pub mod core {
             }
         }
 
+        /// Modify all positions in place.
+        #[inline]
+        pub fn expand_all(&self, it: Skip<IterMut<'_, (TextRange, usize)>>) {
+            for (r, _s) in it {
+                self._expand(&mut r.start);
+                self._expand(&mut r.end);
+            }
+        }
+
         /// Return the modified position, as if this range expanded from its
         /// start to its full expansion.
-        pub fn expand(&self, mut pos: (usize, usize)) -> (usize, usize) {
+        #[inline]
+        pub fn expand(&self, pos: (usize, usize)) -> (usize, usize) {
+            let mut tmp = pos;
+            self._expand(&mut tmp);
+            tmp
+        }
+
+        #[inline(always)]
+        fn _expand(&self, pos: &mut (usize, usize)) {
             let delta_lines = self.end.1 - self.start.1;
-            if pos < self.start {
-                pos
+            if *pos < self.start {
+                // noop
             } else {
                 if pos.1 > self.start.1 {
                     pos.1 += delta_lines;
@@ -1479,16 +1591,33 @@ pub mod core {
                         pos.1 += delta_lines;
                     }
                 }
-                pos
+            }
+        }
+
+        /// Modify all positions in place.
+        #[inline]
+        pub fn shrink_all(&self, it: Skip<IterMut<'_, (TextRange, usize)>>) {
+            for (r, _s) in it {
+                self._shrink(&mut r.start);
+                self._shrink(&mut r.end);
             }
         }
 
         /// Return the modified position, if this range would shrink to nothing.
-        pub fn shrink(&self, mut pos: (usize, usize)) -> (usize, usize) {
+        #[inline]
+        pub fn shrink(&self, pos: (usize, usize)) -> (usize, usize) {
+            let mut tmp = pos;
+            self._shrink(&mut tmp);
+            tmp
+        }
+
+        /// Return the modified position, if this range would shrink to nothing.
+        #[inline(always)]
+        fn _shrink(&self, pos: &mut (usize, usize)) {
             let delta_lines = self.end.1 - self.start.1;
-            match self.ordering_inclusive(pos) {
-                Ordering::Greater => pos,
-                Ordering::Equal => self.start,
+            match self.ordering_inclusive(*pos) {
+                Ordering::Greater => {}
+                Ordering::Equal => *pos = self.start,
                 Ordering::Less => {
                     if pos.1 > self.end.1 {
                         pos.1 -= delta_lines;
@@ -1499,7 +1628,6 @@ pub mod core {
                             pos.1 -= delta_lines;
                         }
                     }
-                    pos
                 }
             }
         }
@@ -1713,6 +1841,18 @@ pub mod core {
         /// Resets the selection and any styles.
         pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
             self.value = Rope::from_str(s.as_ref());
+            self.offset = (0, 0);
+            self.cursor = (0, 0);
+            self.anchor = (0, 0);
+            self.move_col = None;
+            self.styles.clear_styles();
+        }
+
+        /// Set the text value as a Rope.
+        /// Resets all internal state.
+        #[inline]
+        pub fn set_rope(&mut self, s: Rope) {
+            self.value = s;
             self.offset = (0, 0);
             self.cursor = (0, 0);
             self.anchor = (0, 0);
@@ -2041,7 +2181,6 @@ pub mod core {
         /// Grapheme position to char position.
         pub fn char_at(&self, pos: (usize, usize)) -> Option<usize> {
             let Some((byte_pos, _)) = self.byte_at(pos) else {
-                debug!("no byte_pos");
                 return None;
             };
             Some(
@@ -2058,14 +2197,9 @@ pub mod core {
                 return;
             }
 
-            debug!("insert_char {:?} {:?}", pos, self.value);
-
             let Some(char_pos) = self.char_at(pos) else {
-                debug!("invalid pos {:?}", pos);
                 return;
             };
-
-            debug!("insert_char {:?} {}->{}", pos, c, char_pos);
 
             // no way to know if the new char combines with a surrounding char.
             // the difference of the graphem len seems safe though.
@@ -2075,17 +2209,13 @@ pub mod core {
 
             let insert = TextRange::new((pos.0, pos.1), (pos.0 + new_len - old_len, pos.1));
 
-            for (r, _) in self.styles.styles_after_mut(pos) {
-                r.start = insert.expand(r.start);
-                r.end = insert.expand(r.end);
-            }
+            insert.expand_all(self.styles.styles_after_mut(pos));
             self.anchor = insert.expand(self.anchor);
             self.cursor = insert.expand(self.cursor);
         }
 
         /// Insert a line break.
         pub fn insert_newline(&mut self, pos: (usize, usize)) {
-            debug!("insert_newline {:?} ", pos);
             let Some(char_pos) = self.char_at(pos) else {
                 panic!("invalid pos {:?} value {:?}", pos, self.value);
             };
@@ -2094,10 +2224,7 @@ pub mod core {
 
             let insert = TextRange::new((pos.0, pos.1), (0, pos.1 + 1));
 
-            for (r, _) in self.styles.styles_after_mut(pos) {
-                r.start = insert.expand(r.start);
-                r.end = insert.expand(r.end);
-            }
+            insert.expand_all(self.styles.styles_after_mut(pos));
             self.anchor = insert.expand(self.anchor);
             self.cursor = insert.expand(self.cursor);
         }

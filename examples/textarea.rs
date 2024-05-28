@@ -19,6 +19,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
 use ratatui::widgets::Paragraph;
 use ratatui::{Frame, Terminal};
+use ropey::RopeBuilder;
 use std::io::{stdout, Stdout};
 use std::time::{Duration, SystemTime};
 use std::{fmt, fs};
@@ -199,6 +200,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
 
     let text = TextArea::new()
         .style(Style::default().black().on_dark_gray())
+        .select_style(Style::default().black().on_yellow())
         .text_style([
             Style::new().red(),
             Style::new().underlined(),
@@ -264,7 +266,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         .value
         .styles_at(state.textarea.cursor(), &mut styles);
     _ = write!(&mut stats, "cursor-styles: ",);
-    for s in styles {
+    for s in styles.iter().take(20) {
         _ = write!(&mut stats, "{}, ", s);
     }
     _ = writeln!(&mut stats);
@@ -274,7 +276,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         "text-styles: {}",
         state.textarea.value.styles().len()
     );
-    for (r, s) in state.textarea.value.styles() {
+    for (r, s) in state.textarea.value.styles().iter().take(20) {
         _ = writeln!(&mut stats, "    {:?}={} ", r, s);
     }
     let dbg = Paragraph::new(stats);
@@ -311,7 +313,6 @@ fn handle_input(
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r = state.textarea.handle(event, FocusKeys);
-    debug!("event {:?} => {:?}", event, r);
     if r != TextOutcome::NotUsed {
         return Ok(r.into());
     }
@@ -339,37 +340,39 @@ fn handle_input(
 }
 
 pub(crate) fn insert_text_3(state: &mut State) {
-    let mut l = lorem_rustum::LoremRustum::new(10_000_000);
+    let mut l = lorem_rustum::LoremRustum::new(100_000_000);
 
     let mut style = Vec::new();
 
-    let mut buf = String::new();
+    let mut buf = RopeBuilder::new();
     let mut pos = 0;
     let mut width = 0;
     for p in l.body {
-        buf.push_str(p);
-        buf.push(' ');
+        buf.append(p);
+        buf.append(" ");
         width += p.len() + 1;
 
         if p == "macro" {
             style.push((pos, pos + p.len(), 0));
         } else if p == "assert!" {
             style.push((pos, pos + p.len(), 1));
-        } else if p == "<'a>" {
-            style.push((pos, pos + p.len(), 2));
-        } else if p == "await" {
-            style.push((pos, pos + p.len(), 3));
+            // } else if p == "<'a>" {
+            //     style.push((pos, pos + p.len(), 2));
+            // } else if p == "await" {
+            //     style.push((pos, pos + p.len(), 3));
         }
 
         pos += p.len() + 1;
 
         if width > 66 {
-            buf.push('\n');
+            buf.append("\n");
             width = 0;
             pos += 1;
         }
     }
-    state.textarea.set_value(buf);
+    let buf = buf.finish();
+
+    state.textarea.set_rope(buf);
 
     for (b, e, s) in style {
         let bb = state.textarea.byte_pos(b).expect("pos");
@@ -383,7 +386,12 @@ pub(crate) fn insert_text_2(state: &mut State) {
 }
 
 pub(crate) fn insert_text_1(state: &mut State) {
-    state.textarea.set_value("short text");
+    let str = "short text\n🤷‍♂️\n🤷‍♀️\n🤦‍♂️\n❤️\n🤦‍♀️\n💕\n🙍🏿‍♀️\n";
+    for c in str.chars() {
+        debug!("text1: {:?} {:x}", c, c as u32);
+    }
+
+    state.textarea.set_value(str);
 }
 
 pub(crate) fn insert_text_0(state: &mut State) {
