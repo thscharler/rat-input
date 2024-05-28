@@ -1,3 +1,7 @@
+# 0.15.0
+
+* Add TextArea
+
 # 0.14.0
 
 * Remove StatefulWidgetRef

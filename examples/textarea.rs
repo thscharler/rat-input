@@ -7,20 +7,20 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
-use log::debug;
 use rat_event::ct_event;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
 use rat_input::statusline::{StatusLine, StatusLineState};
 use rat_input::textarea::core::TextRange;
-use rat_input::textarea::{TextArea, TextAreaState};
+use rat_input::textarea::{TextArea, TextAreaState, TextOutcome};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
+use ratatui::widgets::Paragraph;
 use ratatui::{Frame, Terminal};
-use std::fs;
 use std::io::{stdout, Stdout};
 use std::time::{Duration, SystemTime};
+use std::{fmt, fs};
 
 fn main() -> Result<(), anyhow::Error> {
     setup_logging()?;
@@ -32,22 +32,7 @@ fn main() -> Result<(), anyhow::Error> {
         menu: Default::default(),
         status: Default::default(),
     };
-    state.textarea.value.set_value(DATA1);
-
-    state.textarea.add_style(TextRange::new((0, 0), (13, 0)), 0);
-    state.textarea.add_style(TextRange::new((0, 1), (13, 1)), 0);
-    state.textarea.add_style(TextRange::new((4, 3), (17, 3)), 0);
-    state
-        .textarea
-        .add_style(TextRange::new((31, 44), (44, 44)), 0);
-
-    // overlapping styles
-    state
-        .textarea
-        .add_style(TextRange::new((30, 7), (42, 7)), 0);
-    state
-        .textarea
-        .add_style(TextRange::new((37, 7), (41, 7)), 1);
+    insert_text_0(&mut state);
 
     run_ui(&mut data, &mut state)
 }
@@ -206,6 +191,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
     let l2 = Layout::horizontal([
         Constraint::Length(1),
         Constraint::Fill(1),
+        Constraint::Length(1),
         Constraint::Fill(1),
     ])
     .split(l1[1]);
@@ -214,34 +200,91 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         .style(Style::default().black().on_dark_gray())
         .text_style([Style::new().red(), Style::new().underlined()]);
     frame.render_stateful_widget(text, l2[1], &mut state.textarea);
-
-    let ccursor = state.textarea.selection();
     if let Some(cursor) = state.textarea.screen_cursor() {
         frame.set_cursor(cursor.x, cursor.y);
-        state.status.status(
-            1,
-            format!(
-                "{}|{} - {}|{} -> V{}|{}",
-                ccursor.start().0,
-                ccursor.start().1,
-                ccursor.end().0,
-                ccursor.end().1,
-                cursor.x,
-                cursor.y
-            ),
+    }
+
+    use fmt::Write;
+    let mut stats = String::new();
+    _ = writeln!(&mut stats);
+    _ = writeln!(
+        &mut stats,
+        "cursor: {}:{}",
+        state.textarea.cursor().0,
+        state.textarea.cursor().1
+    );
+    _ = writeln!(
+        &mut stats,
+        "anchor: {}:{}",
+        state.textarea.anchor().0,
+        state.textarea.anchor().1
+    );
+    if let Some(screen_cursor) = state.textarea.screen_cursor() {
+        _ = writeln!(
+            &mut stats,
+            "screen: {}:{}",
+            screen_cursor.x, screen_cursor.y
         );
     } else {
-        state.status.status(
-            1,
-            format!(
-                "{}|{} - {}|{} -> None",
-                ccursor.start().0,
-                ccursor.start().1,
-                ccursor.end().0,
-                ccursor.end().1,
-            ),
-        );
+        _ = writeln!(&mut stats, "screen: None",);
     }
+    _ = writeln!(
+        &mut stats,
+        "width: {:?} ",
+        state.textarea.line_width(state.textarea.cursor().1)
+    );
+    _ = writeln!(
+        &mut stats,
+        "char: pos {:?} len {:?} ",
+        state.textarea.value.char_at(state.textarea.cursor()),
+        state.textarea.value.len_chars()
+    );
+    _ = writeln!(
+        &mut stats,
+        "next word: {:?}",
+        state
+            .textarea
+            .value
+            .next_word_boundary(state.textarea.cursor())
+    );
+    _ = writeln!(
+        &mut stats,
+        "prev word: {:?}",
+        state
+            .textarea
+            .value
+            .prev_word_boundary(state.textarea.cursor())
+    );
+
+    let mut styles = Vec::new();
+    state
+        .textarea
+        .value
+        .styles_at(state.textarea.cursor(), &mut styles);
+    _ = write!(&mut stats, "cursor-styles: ",);
+    for s in styles {
+        _ = write!(&mut stats, "{}, ", s);
+    }
+    _ = writeln!(&mut stats);
+
+    _ = writeln!(&mut stats, "text-styles: ",);
+    for (r, s) in state.textarea.value.styles() {
+        _ = writeln!(&mut stats, "    {:?}={} ", r, s);
+    }
+    let dbg = Paragraph::new(stats);
+    frame.render_widget(dbg, l2[3]);
+
+    let ccursor = state.textarea.selection();
+    state.status.status(
+        1,
+        format!(
+            "{}:{} - {}:{}",
+            ccursor.start().1,
+            ccursor.start().0,
+            ccursor.end().1,
+            ccursor.end().0,
+        ),
+    );
 
     let menu1 = MenuLine::new()
         .title("TextArea")
@@ -261,8 +304,8 @@ fn handle_input(
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r = state.textarea.handle(event, FocusKeys);
-    if r != Outcome::NotUsed {
-        return Ok(r);
+    if r != TextOutcome::NotUsed {
+        return Ok(r.into());
     }
 
     let r = HandleEvent::handle(&mut state.menu, event, FocusKeys);
@@ -273,6 +316,9 @@ fn handle_input(
         MenuOutcome::Activated(v) => {
             state.status.status(0, format!("Activated {}", v));
             match v {
+                0 => insert_text_0(state),
+                1 => insert_text_1(state),
+                2 => insert_text_2(state),
                 3 => return Err(anyhow!("Quit")),
                 _ => {}
             }
@@ -283,7 +329,34 @@ fn handle_input(
     Ok(r.into())
 }
 
-static DATA1: &str = "Ridley Scott
+pub(crate) fn insert_text_2(state: &mut State) {
+    state.textarea.set_value("");
+}
+
+pub(crate) fn insert_text_1(state: &mut State) {
+    state.textarea.set_value("short text");
+}
+
+pub(crate) fn insert_text_0(state: &mut State) {
+    state.textarea.value.set_value(DATA_0);
+
+    state.textarea.add_style(TextRange::new((0, 0), (13, 0)), 0);
+    state.textarea.add_style(TextRange::new((0, 1), (13, 1)), 0);
+    state.textarea.add_style(TextRange::new((4, 3), (17, 3)), 0);
+    state
+        .textarea
+        .add_style(TextRange::new((31, 44), (44, 44)), 0);
+
+    // overlapping styles
+    state
+        .textarea
+        .add_style(TextRange::new((30, 7), (42, 7)), 0);
+    state
+        .textarea
+        .add_style(TextRange::new((37, 7), (41, 7)), 1);
+}
+
+static DATA_0: &str = "Ridley Scott
 Ridley Scott (2015)
 
 Sir Ridley Scott GBE[1] (* 30. November 1937 in South Shields, England) ist ein

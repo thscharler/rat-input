@@ -186,7 +186,19 @@ fn test_stylemap() {
 }
 
 #[test]
-fn cw() {
-    let t = "👩🏻";
-    dbg!(t.width());
+fn text_expansion() {
+    let r = TextRange::new((5, 0), (10, 0));
+
+    assert_eq!(r.expand((4, 0)), (4, 0));
+    assert_eq!(r.expand((5, 0)), (10, 0));
+    assert_eq!(r.expand((6, 0)), (11, 0));
+    assert_eq!(r.expand((10, 0)), (15, 0));
+    assert_eq!(r.expand((11, 0)), (16, 0));
+
+    let r = TextRange::new((5, 0), (0, 1));
+    assert_eq!(r.expand((4, 0)), (4, 0));
+    assert_eq!(r.expand((5, 0)), (0, 1));
+    assert_eq!(r.expand((6, 0)), (1, 1));
+    assert_eq!(r.expand((10, 0)), (5, 1));
+    assert_eq!(r.expand((11, 0)), (6, 1));
 }

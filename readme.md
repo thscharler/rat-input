@@ -4,13 +4,22 @@
 [![License](https://img.shields.io/badge/license-APACHE-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 ![](https://tokei.rs/b1/github/thscharler/rat-input)
 
-## Widgets for text-input based on ratatui.
+## Data input widgets for ratatui.
 
 These widgets are plain vanilla ratatui widgets.
 
 Eventhandling is currently crossterm only.
 In practice event-handling is calling 1 or 2 functions on the state, so this
 should be easy to map to other systems. (Contributions welcome :)
+
+# [TextArea](crate::textarea::TextArea)
+
+Editable text area.
+
+* Range based text styles.
+* Text selection with keyboard + mouse
+* Possible states as style: Focused
+* Emoji supported.
 
 # [TextInput](crate::input::TextInput)
 
