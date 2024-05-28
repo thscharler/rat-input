@@ -3,7 +3,6 @@
 use crate::_private::NonExhaustive;
 use crate::textarea::core::{RopeGraphemes, TextRange};
 use crate::util::MouseFlags;
-use log::debug;
 use rat_event::util::Outcome;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
@@ -263,10 +262,11 @@ impl TextAreaState {
         self.value.byte_pos(byte)
     }
 
-    /// Convert a text area position to a byte position.
+    /// Convert a text area position to a byte range.
     /// Uses grapheme based column indexes.
+    /// Returns (byte-start, byte-end) of the grapheme at the given position.
     #[inline]
-    pub fn byte_at(&self, pos: (usize, usize)) -> Option<usize> {
+    pub fn byte_at(&self, pos: (usize, usize)) -> Option<(usize, usize)> {
         self.value.byte_at(pos)
     }
 
@@ -765,7 +765,7 @@ impl TextAreaState {
     }
 
     /// Cursor position on the screen.
-    pub fn screen_cursor(&self) -> Option<Position> {
+    pub fn screen_cursor(&self) -> Option<(u16, u16)> {
         let (cx, cy) = self.value.cursor();
         let (ox, oy) = self.value.offset();
 
@@ -782,14 +782,14 @@ impl TextAreaState {
             } else {
                 let sx = self.to_screen_col((cx, cy)).expect("valid_cursor");
 
-                Some(Position::new(self.inner.x + sx, self.inner.y + sy as u16))
+                Some((self.inner.x + sx, self.inner.y + sy as u16))
             }
         }
     }
 
     /// Set the cursor position from screen coordinates.
-    pub fn set_screen_cursor(&mut self, cursor: (isize, isize), extend_selection: bool) -> bool {
-        let (scx, scy) = cursor;
+    pub fn set_screen_cursor(&mut self, cursor: (i16, i16), extend_selection: bool) -> bool {
+        let (scx, scy) = (cursor.0 as isize, cursor.1 as isize);
         let (ox, oy) = self.value.offset();
 
         let cy = min(max(oy as isize + scy, 0) as usize, self.line_len() - 1);
@@ -964,6 +964,17 @@ impl UsedEvent for TextOutcome {
     }
 }
 
+// Useful for converting most navigation/edit results.
+impl From<bool> for TextOutcome {
+    fn from(value: bool) -> Self {
+        if value {
+            TextOutcome::Changed
+        } else {
+            TextOutcome::Unchanged
+        }
+    }
+}
+
 impl From<TextOutcome> for Outcome {
     fn from(value: TextOutcome) -> Self {
         match value {
@@ -977,129 +988,166 @@ impl From<TextOutcome> for Outcome {
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> TextOutcome {
-        let r = 'f: {
-            let change = match event {
-                ct_event!(keycode press Left) => self.move_left(1, false),
-                ct_event!(keycode press Right) => self.move_right(1, false),
-                ct_event!(keycode press Up) => self.move_up(1, false),
-                ct_event!(keycode press Down) => self.move_down(1, false),
-                ct_event!(keycode press PageUp) => self.move_up(self.vertical_page(), false),
-                ct_event!(keycode press PageDown) => self.move_down(self.vertical_page(), false),
-                ct_event!(keycode press Home) => self.move_to_line_start(false),
-                ct_event!(keycode press End) => self.move_to_line_end(false),
-                ct_event!(keycode press CONTROL-Left) => self.move_to_prev_word(false),
-                ct_event!(keycode press CONTROL-Right) => self.move_to_next_word(false),
-                ct_event!(keycode press CONTROL-Up) => false,
-                ct_event!(keycode press CONTROL-Down) => false,
-                ct_event!(keycode press CONTROL-PageUp) => self.move_to_screen_start(false),
-                ct_event!(keycode press CONTROL-PageDown) => self.move_to_screen_end(false),
-                ct_event!(keycode press CONTROL-Home) => self.move_to_start(false),
-                ct_event!(keycode press CONTROL-End) => self.move_to_end(false),
+        let mut r = match event {
+            ct_event!(key press c)
+            | ct_event!(key press SHIFT-c)
+            | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c).into(),
+            ct_event!(keycode press Enter) => self.insert_newline().into(),
+            ct_event!(keycode press Backspace) => self.delete_prev_char().into(),
+            ct_event!(keycode press Delete) => self.delete_next_char().into(),
+            ct_event!(keycode press CONTROL-Backspace) => self.delete_prev_word().into(),
+            ct_event!(keycode press CONTROL-Delete) => self.delete_next_word().into(),
 
-                ct_event!(keycode press ALT-Left) => self.scroll_left(1),
-                ct_event!(keycode press ALT-Right) => self.scroll_right(1),
-                ct_event!(keycode press ALT-Up) => self.scroll_up(1),
-                ct_event!(keycode press ALT-Down) => self.scroll_down(1),
-                ct_event!(keycode press ALT-PageUp) => {
-                    self.scroll_up(max(self.vertical_page() / 2, 1))
-                }
-                ct_event!(keycode press ALT-PageDown) => {
-                    self.scroll_down(max(self.vertical_page() / 2, 1))
-                }
-                ct_event!(keycode press ALT_SHIFT-PageUp) => {
-                    self.scroll_left(max(self.horizontal_page() / 5, 1))
-                }
-                ct_event!(keycode press ALT_SHIFT-PageDown) => {
-                    self.scroll_right(max(self.horizontal_page() / 5, 1))
-                }
-
-                ct_event!(keycode press SHIFT-Left) => self.move_left(1, true),
-                ct_event!(keycode press SHIFT-Right) => self.move_right(1, true),
-                ct_event!(keycode press SHIFT-Up) => self.move_up(1, true),
-                ct_event!(keycode press SHIFT-Down) => self.move_down(1, true),
-                ct_event!(keycode press SHIFT-PageUp) => self.move_up(self.vertical_page(), true),
-                ct_event!(keycode press SHIFT-PageDown) => {
-                    self.move_down(self.vertical_page(), true)
-                }
-                ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true),
-                ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true),
-                ct_event!(keycode press CONTROL_SHIFT-Left) => self.move_to_prev_word(true),
-                ct_event!(keycode press CONTROL_SHIFT-Right) => self.move_to_next_word(true),
-                ct_event!(key press CONTROL-'a') => self.select_all(),
-                _ => false,
-            };
-            if change {
-                break 'f TextOutcome::Changed;
-            }
-
-            let change = match event {
-                ct_event!(key press c)
-                | ct_event!(key press SHIFT-c)
-                | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c),
-                ct_event!(keycode press Enter) => self.insert_newline(),
-                ct_event!(keycode press Backspace) => self.delete_prev_char(),
-                ct_event!(keycode press Delete) => self.delete_next_char(),
-                ct_event!(keycode press CONTROL-Backspace) => self.delete_prev_word(),
-                ct_event!(keycode press CONTROL-Delete) => self.delete_next_word(),
-                _ => break 'f TextOutcome::NotUsed,
-            };
-            if change {
-                break 'f TextOutcome::TextChanged;
-            }
-
-            TextOutcome::Unchanged
+            ct_event!(key release _)
+            | ct_event!(key release SHIFT-_)
+            | ct_event!(key release CONTROL_ALT-_)
+            | ct_event!(keycode release Enter)
+            | ct_event!(keycode release Backspace)
+            | ct_event!(keycode release Delete)
+            | ct_event!(keycode release CONTROL-Backspace)
+            | ct_event!(keycode release CONTROL-Delete) => TextOutcome::Unchanged,
+            _ => TextOutcome::NotUsed,
         };
 
-        match r {
-            TextOutcome::NotUsed => HandleEvent::handle(self, event, MouseOnly),
-            v => v,
+        if r == TextOutcome::NotUsed {
+            r = self.handle(event, ReadOnly);
         }
+        if r == TextOutcome::NotUsed {
+            r = self.handle(event, MouseOnly);
+        }
+        r
+    }
+}
+
+/// Runs only the navigation events, not any editing.
+#[derive(Debug)]
+pub struct ReadOnly;
+
+impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for TextAreaState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: ReadOnly) -> TextOutcome {
+        let mut r = match event {
+            ct_event!(keycode press Left) => self.move_left(1, false).into(),
+            ct_event!(keycode press Right) => self.move_right(1, false).into(),
+            ct_event!(keycode press Up) => self.move_up(1, false).into(),
+            ct_event!(keycode press Down) => self.move_down(1, false).into(),
+            ct_event!(keycode press PageUp) => self.move_up(self.vertical_page(), false).into(),
+            ct_event!(keycode press PageDown) => self.move_down(self.vertical_page(), false).into(),
+            ct_event!(keycode press Home) => self.move_to_line_start(false).into(),
+            ct_event!(keycode press End) => self.move_to_line_end(false).into(),
+            ct_event!(keycode press CONTROL-Left) => self.move_to_prev_word(false).into(),
+            ct_event!(keycode press CONTROL-Right) => self.move_to_next_word(false).into(),
+            ct_event!(keycode press CONTROL-Up) => false.into(),
+            ct_event!(keycode press CONTROL-Down) => false.into(),
+            ct_event!(keycode press CONTROL-PageUp) => self.move_to_screen_start(false).into(),
+            ct_event!(keycode press CONTROL-PageDown) => self.move_to_screen_end(false).into(),
+            ct_event!(keycode press CONTROL-Home) => self.move_to_start(false).into(),
+            ct_event!(keycode press CONTROL-End) => self.move_to_end(false).into(),
+
+            ct_event!(keycode press ALT-Left) => self.scroll_left(1).into(),
+            ct_event!(keycode press ALT-Right) => self.scroll_right(1).into(),
+            ct_event!(keycode press ALT-Up) => self.scroll_up(1).into(),
+            ct_event!(keycode press ALT-Down) => self.scroll_down(1).into(),
+            ct_event!(keycode press ALT-PageUp) => {
+                self.scroll_up(max(self.vertical_page() / 2, 1)).into()
+            }
+            ct_event!(keycode press ALT-PageDown) => {
+                self.scroll_down(max(self.vertical_page() / 2, 1)).into()
+            }
+            ct_event!(keycode press ALT_SHIFT-PageUp) => {
+                self.scroll_left(max(self.horizontal_page() / 5, 1)).into()
+            }
+            ct_event!(keycode press ALT_SHIFT-PageDown) => {
+                self.scroll_right(max(self.horizontal_page() / 5, 1)).into()
+            }
+
+            ct_event!(keycode press SHIFT-Left) => self.move_left(1, true).into(),
+            ct_event!(keycode press SHIFT-Right) => self.move_right(1, true).into(),
+            ct_event!(keycode press SHIFT-Up) => self.move_up(1, true).into(),
+            ct_event!(keycode press SHIFT-Down) => self.move_down(1, true).into(),
+            ct_event!(keycode press SHIFT-PageUp) => {
+                self.move_up(self.vertical_page(), true).into()
+            }
+            ct_event!(keycode press SHIFT-PageDown) => {
+                self.move_down(self.vertical_page(), true).into()
+            }
+            ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true).into(),
+            ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true).into(),
+            ct_event!(keycode press CONTROL_SHIFT-Left) => self.move_to_prev_word(true).into(),
+            ct_event!(keycode press CONTROL_SHIFT-Right) => self.move_to_next_word(true).into(),
+            ct_event!(key press CONTROL-'a') => self.select_all().into(),
+
+            ct_event!(keycode release Left)
+            | ct_event!(keycode release Right)
+            | ct_event!(keycode release Up)
+            | ct_event!(keycode release Down)
+            | ct_event!(keycode release PageUp)
+            | ct_event!(keycode release PageDown)
+            | ct_event!(keycode release Home)
+            | ct_event!(keycode release End)
+            | ct_event!(keycode release CONTROL-Left)
+            | ct_event!(keycode release CONTROL-Right)
+            | ct_event!(keycode release CONTROL-Up)
+            | ct_event!(keycode release CONTROL-Down)
+            | ct_event!(keycode release CONTROL-PageUp)
+            | ct_event!(keycode release CONTROL-PageDown)
+            | ct_event!(keycode release CONTROL-Home)
+            | ct_event!(keycode release CONTROL-End)
+            | ct_event!(keycode release ALT-Left)
+            | ct_event!(keycode release ALT-Right)
+            | ct_event!(keycode release ALT-Up)
+            | ct_event!(keycode release ALT-Down)
+            | ct_event!(keycode release ALT-PageUp)
+            | ct_event!(keycode release ALT-PageDown)
+            | ct_event!(keycode release ALT_SHIFT-PageUp)
+            | ct_event!(keycode release ALT_SHIFT-PageDown)
+            | ct_event!(keycode release SHIFT-Left)
+            | ct_event!(keycode release SHIFT-Right)
+            | ct_event!(keycode release SHIFT-Up)
+            | ct_event!(keycode release SHIFT-Down)
+            | ct_event!(keycode release SHIFT-PageUp)
+            | ct_event!(keycode release SHIFT-PageDown)
+            | ct_event!(keycode release SHIFT-Home)
+            | ct_event!(keycode release SHIFT-End)
+            | ct_event!(keycode release CONTROL_SHIFT-Left)
+            | ct_event!(keycode release CONTROL_SHIFT-Right)
+            | ct_event!(key release CONTROL-'a') => TextOutcome::Unchanged,
+            _ => TextOutcome::NotUsed,
+        };
+
+        if r == TextOutcome::NotUsed {
+            r = self.handle(event, MouseOnly);
+        }
+        r
     }
 }
 
 impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
-        match event {
+        let r = match event {
             ct_event!(scroll down for column,row) => {
                 if self.area.contains(Position::new(*column, *row)) {
-                    if self.scroll_down(self.vertical_scroll()) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::Unchanged
-                    }
+                    self.scroll_down(self.vertical_scroll()).into()
                 } else {
                     TextOutcome::NotUsed
                 }
             }
             ct_event!(scroll up for column, row) => {
                 if self.area.contains(Position::new(*column, *row)) {
-                    if self.scroll_up(self.vertical_scroll()) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::Unchanged
-                    }
+                    self.scroll_up(self.vertical_scroll()).into()
                 } else {
                     TextOutcome::NotUsed
                 }
             }
             ct_event!(scroll ALT down for column,row) => {
                 if self.area.contains(Position::new(*column, *row)) {
-                    if self.scroll_right(self.horizontal_scroll()) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::Unchanged
-                    }
+                    self.scroll_right(self.horizontal_scroll()).into()
                 } else {
                     TextOutcome::NotUsed
                 }
             }
             ct_event!(scroll ALT up for column, row) => {
                 if self.area.contains(Position::new(*column, *row)) {
-                    if self.scroll_left(self.horizontal_scroll()) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::Unchanged
-                    }
+                    self.scroll_left(self.horizontal_scroll()).into()
                 } else {
                     TextOutcome::NotUsed
                 }
@@ -1107,26 +1155,18 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
             ct_event!(mouse down Left for column,row) => {
                 if self.inner.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
-                    let cx = column - self.inner.x;
-                    let cy = row - self.inner.y;
-                    if self.set_screen_cursor((cx as isize, cy as isize), false) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::Unchanged
-                    }
+                    let cx = (column - self.inner.x) as i16;
+                    let cy = (row - self.inner.y) as i16;
+                    self.set_screen_cursor((cx, cy), false).into()
                 } else {
                     TextOutcome::NotUsed
                 }
             }
             ct_event!(mouse drag Left for column, row) => {
                 if self.mouse.do_drag() {
-                    let cx = *column as isize - self.inner.x as isize;
-                    let cy = *row as isize - self.inner.y as isize;
-                    if self.set_screen_cursor((cx, cy), true) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::Unchanged
-                    }
+                    let cx = *column as i16 - self.inner.x as i16;
+                    let cy = *row as i16 - self.inner.y as i16;
+                    self.set_screen_cursor((cx, cy), true).into()
                 } else {
                     TextOutcome::NotUsed
                 }
@@ -1136,17 +1176,19 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
                 TextOutcome::NotUsed
             }
             _ => TextOutcome::NotUsed,
-        }
+        };
+
+        r
     }
 }
 
-mod graphemes {
+pub mod graphemes {
     use ropey::iter::Chunks;
     use ropey::RopeSlice;
     use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 
     /// Length as grapheme count.
-    pub(crate) fn rope_len(r: RopeSlice<'_>) -> usize {
+    pub fn rope_len(r: RopeSlice<'_>) -> usize {
         let it = RopeGraphemes::new(r);
         it.filter(|c| c != "\n").count()
     }
@@ -1770,7 +1812,6 @@ pub mod core {
             };
             let line = lines.next();
             if let Some(line) = line {
-                debug!("line_width {:?} ", line.bytes());
                 Some(rope_len(line))
             } else {
                 Some(0)
@@ -1929,17 +1970,17 @@ pub mod core {
             self.value.len_chars()
         }
 
+        /// Len in bytes
+        pub fn len_bytes(&self) -> usize {
+            self.value.len_bytes()
+        }
+
         /// Char position to grapheme position.
         pub fn char_pos(&self, char_pos: usize) -> Option<(usize, usize)> {
             let Ok(byte_pos) = self.value.try_char_to_byte(char_pos) else {
                 return None;
             };
             self.byte_pos(byte_pos)
-        }
-
-        /// Len in bytes
-        pub fn len_bytes(&self) -> usize {
-            self.value.len_bytes()
         }
 
         /// Byte position to grapheme position.
@@ -1950,13 +1991,12 @@ pub mod core {
             let mut x = 0;
             let byte_y = self.value.try_line_to_byte(y).expect("valid_y");
 
-            // todo: do we need to filter \n here?
             let mut it_line = self.line_idx(y).expect("valid_y");
             loop {
-                let Some((idx, _cc)) = it_line.next() else {
+                let Some(((sb, _eb), _cc)) = it_line.next() else {
                     break;
                 };
-                if byte_y + idx >= byte {
+                if byte_y + sb >= byte {
                     break;
                 }
                 x += 1;
@@ -1966,41 +2006,42 @@ pub mod core {
         }
 
         /// Grapheme position to byte position.
-        /// This is the (start,end) position of the grapheme.
+        /// This is the (start,end) position of the single grapheme after pos.
         pub fn byte_at(&self, pos: (usize, usize)) -> Option<(usize, usize)> {
             let Ok(line_byte) = self.value.try_line_to_byte(pos.1) else {
-                debug!("byte_at {:?} -> None", pos);
                 return None;
             };
-            // todo: do we need to filter \n here? maybe if x==line_len+1 ??
-            let mut it_line = self.line_idx(pos.1).expect("valid_line");
-            let mut x = 0;
-            let mut byte = line_byte;
-            let mut byte_len = 0;
-            loop {
-                let Some((b, _cc)) = it_line.next() else {
-                    debug!("break at end");
-                    break;
-                };
-                if pos.0 == x {
-                    debug!("break at reached");
-                    break;
-                }
-                let Some((b, _cc)) = it_line.next() else {
-                    debug!("break at end");
-                    break;
-                };
-                byte = line_byte + b;
-                x += 1;
-            }
 
-            debug!("byte_at {:?} -> {}", pos, line_byte);
-            Some(line_byte)
+            let len_bytes = self.value.len_bytes();
+            let mut it_line = self.line_idx(pos.1).expect("valid_line");
+            let mut x = -1isize;
+            let mut last_eb = 0;
+            loop {
+                let (sb, eb, last) = if let Some((v, _)) = it_line.next() {
+                    x += 1;
+                    last_eb = v.1;
+                    (v.0, v.1, false)
+                } else {
+                    (last_eb, last_eb, true)
+                };
+
+                if pos.0 == x as usize {
+                    return Some((line_byte + sb, line_byte + eb));
+                }
+                // one past the end is ok.
+                if pos.0 == (x + 1) as usize && line_byte + eb == len_bytes {
+                    return Some((line_byte + eb, line_byte + eb));
+                }
+                if last {
+                    return None;
+                }
+            }
         }
 
         /// Grapheme position to char position.
         pub fn char_at(&self, pos: (usize, usize)) -> Option<usize> {
-            let Some(byte_pos) = self.byte_at(pos) else {
+            let Some((byte_pos, _)) = self.byte_at(pos) else {
+                debug!("no byte_pos");
                 return None;
             };
             Some(
@@ -2013,11 +2054,18 @@ pub mod core {
         /// Insert a character.
         pub fn insert_char(&mut self, pos: (usize, usize), c: char) {
             if c == '\n' {
-                return self.insert_newline(pos);
+                self.insert_newline(pos);
+                return;
             }
+
+            debug!("insert_char {:?} {:?}", pos, self.value);
+
             let Some(char_pos) = self.char_at(pos) else {
-                panic!("invalid pos {:?} value {:?}", pos, self.value);
+                debug!("invalid pos {:?}", pos);
+                return;
             };
+
+            debug!("insert_char {:?} {}->{}", pos, c, char_pos);
 
             // no way to know if the new char combines with a surrounding char.
             // the difference of the graphem len seems safe though.
@@ -2058,7 +2106,7 @@ pub mod core {
             let Some(start_pos) = self.char_at(range.start) else {
                 panic!("invalid range {:?} value {:?}", range, self.value);
             };
-            let Some(end_pos) = self.char_at_inclusive(range.end) else {
+            let Some(end_pos) = self.char_at(range.end) else {
                 panic!("invalid range {:?} value {:?}", range, self.value);
             };
 

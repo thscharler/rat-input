@@ -7,6 +7,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+use log::debug;
 use rat_event::ct_event;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
@@ -32,7 +33,7 @@ fn main() -> Result<(), anyhow::Error> {
         menu: Default::default(),
         status: Default::default(),
     };
-    insert_text_0(&mut state);
+    insert_text_1(&mut state);
 
     run_ui(&mut data, &mut state)
 }
@@ -198,10 +199,15 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
 
     let text = TextArea::new()
         .style(Style::default().black().on_dark_gray())
-        .text_style([Style::new().red(), Style::new().underlined()]);
+        .text_style([
+            Style::new().red(),
+            Style::new().underlined(),
+            Style::new().green(),
+            Style::new().on_yellow(),
+        ]);
     frame.render_stateful_widget(text, l2[1], &mut state.textarea);
-    if let Some(cursor) = state.textarea.screen_cursor() {
-        frame.set_cursor(cursor.x, cursor.y);
+    if let Some((cx, cy)) = state.textarea.screen_cursor() {
+        frame.set_cursor(cx, cy);
     }
 
     use fmt::Write;
@@ -219,12 +225,8 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         state.textarea.anchor().0,
         state.textarea.anchor().1
     );
-    if let Some(screen_cursor) = state.textarea.screen_cursor() {
-        _ = writeln!(
-            &mut stats,
-            "screen: {}:{}",
-            screen_cursor.x, screen_cursor.y
-        );
+    if let Some((scx, scy)) = state.textarea.screen_cursor() {
+        _ = writeln!(&mut stats, "screen: {}:{}", scx, scy);
     } else {
         _ = writeln!(&mut stats, "screen: None",);
     }
@@ -267,7 +269,11 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
     }
     _ = writeln!(&mut stats);
 
-    _ = writeln!(&mut stats, "text-styles: ",);
+    _ = writeln!(
+        &mut stats,
+        "text-styles: {}",
+        state.textarea.value.styles().len()
+    );
     for (r, s) in state.textarea.value.styles() {
         _ = writeln!(&mut stats, "    {:?}={} ", r, s);
     }
@@ -288,9 +294,10 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
 
     let menu1 = MenuLine::new()
         .title("TextArea")
-        .add("Text 1")
-        .add("Text 2")
-        .add("Text 3")
+        .add("Long")
+        .add("Short")
+        .add("None")
+        .add("Lorem")
         .add("_Quit")
         .title_style(Style::default().black().on_yellow())
         .style(Style::default().black().on_dark_gray())
@@ -304,6 +311,7 @@ fn handle_input(
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r = state.textarea.handle(event, FocusKeys);
+    debug!("event {:?} => {:?}", event, r);
     if r != TextOutcome::NotUsed {
         return Ok(r.into());
     }
@@ -319,7 +327,8 @@ fn handle_input(
                 0 => insert_text_0(state),
                 1 => insert_text_1(state),
                 2 => insert_text_2(state),
-                3 => return Err(anyhow!("Quit")),
+                3 => insert_text_3(state),
+                4 => return Err(anyhow!("Quit")),
                 _ => {}
             }
         }
@@ -327,6 +336,46 @@ fn handle_input(
     };
 
     Ok(r.into())
+}
+
+pub(crate) fn insert_text_3(state: &mut State) {
+    let mut l = lorem_rustum::LoremRustum::new(10_000_000);
+
+    let mut style = Vec::new();
+
+    let mut buf = String::new();
+    let mut pos = 0;
+    let mut width = 0;
+    for p in l.body {
+        buf.push_str(p);
+        buf.push(' ');
+        width += p.len() + 1;
+
+        if p == "macro" {
+            style.push((pos, pos + p.len(), 0));
+        } else if p == "assert!" {
+            style.push((pos, pos + p.len(), 1));
+        } else if p == "<'a>" {
+            style.push((pos, pos + p.len(), 2));
+        } else if p == "await" {
+            style.push((pos, pos + p.len(), 3));
+        }
+
+        pos += p.len() + 1;
+
+        if width > 66 {
+            buf.push('\n');
+            width = 0;
+            pos += 1;
+        }
+    }
+    state.textarea.set_value(buf);
+
+    for (b, e, s) in style {
+        let bb = state.textarea.byte_pos(b).expect("pos");
+        let ee = state.textarea.byte_pos(e).expect("pos");
+        state.textarea.add_style(TextRange::new(bb, ee), s);
+    }
 }
 
 pub(crate) fn insert_text_2(state: &mut State) {

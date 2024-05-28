@@ -1,6 +1,5 @@
 use rat_input::textarea::core::{InputCore, TextRange};
 use std::cmp::Ordering;
-use unicode_width::UnicodeWidthStr;
 
 fn insert(v: &mut Vec<TextRange>, r: TextRange) {
     match v.binary_search(&r) {
