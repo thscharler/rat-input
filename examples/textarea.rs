@@ -340,6 +340,9 @@ fn handle_input(
 }
 
 pub(crate) fn insert_text_3(state: &mut State) {
+    #[cfg(debug_assertions)]
+    let mut l = lorem_rustum::LoremRustum::new(1_000_000);
+    #[cfg(not(debug_assertions))]
     let mut l = lorem_rustum::LoremRustum::new(100_000_000);
 
     let mut style = Vec::new();

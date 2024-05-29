@@ -25,7 +25,8 @@ fn test_byte_at() {
     assert_eq!(core.byte_at((3, 2)), Some((14, 15)));
     assert_eq!(core.byte_at((4, 2)), Some((15, 16)));
     assert_eq!(core.byte_at((5, 2)), Some((16, 16)));
-    assert_eq!(core.byte_at((0, 3)), None);
+    assert_eq!(core.byte_at((0, 3)), Some((16, 16)));
+    assert_eq!(core.byte_at((1, 3)), None);
 
     let mut core = InputCore::new();
     core.set_value("asdf");
@@ -153,13 +154,4 @@ fn test_byte_pos() {
     core.set_value("");
 
     assert_eq!(core.byte_pos(0), Some((0, 0)));
-}
-
-
-#[test]
-fn test_ranges() {
-
-
-
-
 }

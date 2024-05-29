@@ -1,5 +1,7 @@
 use rat_input::textarea::core::{InputCore, TextRange};
 use std::cmp::Ordering;
+use std::hint::black_box;
+use std::time::Instant;
 
 fn insert(v: &mut Vec<TextRange>, r: TextRange) {
     match v.binary_search(&r) {
@@ -187,7 +189,6 @@ fn test_stylemap() {
 #[test]
 fn text_expansion() {
     let r = TextRange::new((5, 0), (10, 0));
-
     assert_eq!(r.expand((4, 0)), (4, 0));
     assert_eq!(r.expand((5, 0)), (10, 0));
     assert_eq!(r.expand((6, 0)), (11, 0));
@@ -200,7 +201,66 @@ fn text_expansion() {
     assert_eq!(r.expand((6, 0)), (1, 1));
     assert_eq!(r.expand((10, 0)), (5, 1));
     assert_eq!(r.expand((11, 0)), (6, 1));
+    assert_eq!(r.expand((0, 1)), (0, 2));
+    assert_eq!(r.expand((1, 1)), (1, 2));
+
+    let r = TextRange::new((5, 0), (3, 1));
+    assert_eq!(r.expand((4, 0)), (4, 0));
+    assert_eq!(r.expand((5, 0)), (3, 1));
+    assert_eq!(r.expand((6, 0)), (4, 1));
+    assert_eq!(r.expand((10, 0)), (8, 1));
+    assert_eq!(r.expand((11, 0)), (9, 1));
+    assert_eq!(r.expand((0, 1)), (0, 2));
+    assert_eq!(r.expand((1, 1)), (1, 2));
+
+    let r = TextRange::new((10, 5), (10, 6));
+    assert_eq!(r.expand((10, 7)), (10, 8));
 }
 
+#[test]
+fn test_shrinking() {
+    let r = TextRange::new((5, 0), (10, 0));
+    assert_eq!(r.shrink((4, 0)), (4, 0));
+    assert_eq!(r.shrink((5, 0)), (5, 0));
+    assert_eq!(r.shrink((6, 0)), (5, 0));
+    assert_eq!(r.shrink((10, 0)), (5, 0));
+    assert_eq!(r.shrink((11, 0)), (6, 0));
 
+    let r = TextRange::new((5, 0), (0, 1));
+    assert_eq!(r.shrink((4, 0)), (4, 0));
+    assert_eq!(r.shrink((5, 0)), (5, 0));
+    assert_eq!(r.shrink((6, 0)), (5, 0));
+    assert_eq!(r.shrink((10, 0)), (5, 0));
+    assert_eq!(r.shrink((11, 0)), (5, 0));
+    assert_eq!(r.shrink((0, 1)), (5, 0));
+    assert_eq!(r.shrink((1, 1)), (6, 0));
+    assert_eq!(r.shrink((0, 2)), (0, 1));
+    assert_eq!(r.shrink((1, 2)), (1, 1));
 
+    let r = TextRange::new((10, 5), (10, 6));
+    assert_eq!(r.shrink((10, 7)), (10, 6));
+}
+
+#[test]
+fn test_ordering() {
+    // let r = TextRange::new((5, 0), (0, 1));
+    //
+    // let t = Instant::now();
+    // for _ in 0..1000000 {
+    //     black_box(r.ordering_inclusive((6, 8)));
+    // }
+    // eprintln!("ordering_inclusive {:?}", t.elapsed());
+    //
+    // let t = Instant::now();
+    // for _ in 0..1000000 {
+    //     black_box(r.ordering((6, 8)));
+    // }
+    // eprintln!("ordering {:?}", t.elapsed());
+    //
+    // let r = TextRange::new((5, 0), (0, 1));
+    // let t = Instant::now();
+    // for _ in 0..1000000 {
+    //     black_box((r.start.1, r.start.0).cmp(&(8, 6)));
+    // }
+    // eprintln!("tuple cmp {:?}", t.elapsed());
+}

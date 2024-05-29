@@ -1500,47 +1500,79 @@ pub mod core {
         }
 
         /// Range contains the other range.
-        #[inline]
+        #[inline(always)]
         pub fn contains_range(&self, range: TextRange) -> bool {
             self.ordering(range.start) == Ordering::Equal
                 && self.ordering_inclusive(range.end) == Ordering::Equal
         }
 
         /// What place is the range respective to the given position.
-        #[inline]
+        #[inline(always)]
         pub fn ordering(&self, pos: (usize, usize)) -> Ordering {
-            // reverse the args, then it works.
-            let start = (self.start.1, self.start.0);
-            let end = (self.end.1, self.end.0);
-
-            let pos = (pos.1, pos.0);
-
-            if pos < start {
-                Ordering::Greater
-            } else if pos < end {
-                Ordering::Equal
-            } else {
-                Ordering::Less
+            if pos.1 < self.start.1 {
+                return Ordering::Greater;
+            } else if pos.1 == self.start.1 {
+                if pos.0 < self.start.0 {
+                    return Ordering::Greater;
+                }
             }
+
+            if pos.1 < self.end.1 {
+                return Ordering::Equal;
+            } else if pos.1 == self.end.1 {
+                if pos.0 < self.end.0 {
+                    return Ordering::Equal;
+                }
+            }
+
+            Ordering::Less
+
+            // SURPRISE: contrary to ordering_inclusive the below
+            //           takes the same time as the above in debug mode.
+
+            // // reverse the args, then tuple cmp it works.
+            // if (pos.1, pos.0) < (self.start.1, self.start.0) {
+            //     Ordering::Greater
+            // } else if (pos.1, pos.0) < (self.end.1, self.end.0) {
+            //     Ordering::Equal
+            // } else {
+            //     Ordering::Less
+            // }
         }
 
         /// What place is the range respective to the given position.
         /// This one includes the `range.end`.
-        #[inline]
+        #[inline(always)]
         pub fn ordering_inclusive(&self, pos: (usize, usize)) -> Ordering {
-            // reverse the args, then it works.
-            let start = (self.start.1, self.start.0);
-            let end = (self.end.1, self.end.0);
-
-            let pos = (pos.1, pos.0);
-
-            if pos < start {
-                Ordering::Greater
-            } else if pos <= end {
-                Ordering::Equal
-            } else {
-                Ordering::Less
+            if pos.1 < self.start.1 {
+                return Ordering::Greater;
+            } else if pos.1 == self.start.1 {
+                if pos.0 < self.start.0 {
+                    return Ordering::Greater;
+                }
             }
+
+            if pos.1 < self.end.1 {
+                return Ordering::Equal;
+            } else if pos.1 == self.end.1 {
+                if pos.0 <= self.end.0 {
+                    return Ordering::Equal;
+                }
+            }
+
+            Ordering::Less
+
+            // SURPRISE: above is pretty much faster than that: ???
+            //           at least in debug mode...
+
+            // // reverse the args, then tuple cmp it works.
+            // if (pos.1, pos.0) < (self.start.1, self.start.0) {
+            //     Ordering::Greater
+            // } else if (pos.1, pos.0) <= (self.end.1, self.end.0) {
+            //     Ordering::Equal
+            // } else {
+            //     Ordering::Less
+            // }
         }
 
         /// Modify all positions in place.
@@ -1549,6 +1581,15 @@ pub mod core {
             for (r, _s) in it {
                 self._expand(&mut r.start);
                 self._expand(&mut r.end);
+            }
+        }
+
+        /// Modify all positions in place.
+        #[inline]
+        pub fn shrink_all(&self, it: Skip<IterMut<'_, (TextRange, usize)>>) {
+            for (r, _s) in it {
+                self._shrink(&mut r.start);
+                self._shrink(&mut r.end);
             }
         }
 
@@ -1561,18 +1602,17 @@ pub mod core {
             tmp
         }
 
+        /// Return the modified position, if this range would shrink to nothing.
+        #[inline]
+        pub fn shrink(&self, pos: (usize, usize)) -> (usize, usize) {
+            let mut tmp = pos;
+            self._shrink(&mut tmp);
+            tmp
+        }
+
         #[inline(always)]
         fn _expand(&self, pos: &mut (usize, usize)) {
             let delta_lines = self.end.1 - self.start.1;
-            if *pos < self.start {
-                // noop
-            } else {
-                if pos.1 > self.start.1 {
-                    pos.1 += delta_lines;
-                } else if pos.1 == self.start.1 {
-                    if pos.0 >= self.start.0 {
-                        pos.0 = pos.0 - self.start.0 + self.end.0;
-                        pos.1 += delta_lines;
 
             // comparing only the starting position.
             // the range doesn't exist yet.
@@ -1595,23 +1635,6 @@ pub mod core {
                     }
                 }
             }
-        }
-
-        /// Modify all positions in place.
-        #[inline]
-        pub fn shrink_all(&self, it: Skip<IterMut<'_, (TextRange, usize)>>) {
-            for (r, _s) in it {
-                self._shrink(&mut r.start);
-                self._shrink(&mut r.end);
-            }
-        }
-
-        /// Return the modified position, if this range would shrink to nothing.
-        #[inline]
-        pub fn shrink(&self, pos: (usize, usize)) -> (usize, usize) {
-            let mut tmp = pos;
-            self._shrink(&mut tmp);
-            tmp
         }
 
         /// Return the modified position, if this range would shrink to nothing.
@@ -2214,7 +2237,6 @@ pub mod core {
             let new_len = self.line_width(pos.1).expect("valid_pos");
 
             let insert = TextRange::new((pos.0, pos.1), (pos.0 + new_len - old_len, pos.1));
-
             insert.expand_all(self.styles.styles_after_mut(pos));
             self.anchor = insert.expand(self.anchor);
             self.cursor = insert.expand(self.cursor);
@@ -2243,19 +2265,18 @@ pub mod core {
                 panic!("invalid range {:?} value {:?}", range, self.value);
             };
 
+            let t = Instant::now();
             self.value.remove(start_pos..end_pos);
 
-            // remove deleted styles
+            // remove deleted styles.
+            // this is not a simple range, so filter+collect seems ok.
             let styles = mem::take(&mut self.styles.styles);
             self.styles.styles = styles
                 .into_iter()
                 .filter(|(r, _)| !range.contains_range(*r))
                 .collect();
 
-            for (r, _) in self.styles.styles_after_mut(range.start) {
-                r.start = range.shrink(r.start);
-                r.end = range.shrink(r.end);
-            }
+            range.shrink_all(self.styles.styles_after_mut(range.start));
             self.anchor = range.shrink(self.anchor);
             self.cursor = range.shrink(self.anchor);
         }
