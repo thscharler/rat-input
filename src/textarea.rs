@@ -432,121 +432,108 @@ impl TextAreaState {
         true
     }
 
-    /// Deletes the next char or the current selection.
-    /// Returns true if there was any real change.
-    pub fn delete_next_char(&mut self) -> bool {
-        let (cx, cy) = self.value.cursor();
+    ///
+    pub fn delete_selection(&mut self) -> bool {
+        self.delete_range(self.selection())
+    }
 
-        let Some(c_line_width) = self.value.line_width(cy) else {
-            panic!("invalid_cursor: {:?} value {:?}", (cx, cy), self.value);
-        };
-
-        if self.value.has_selection() {
-            self.value.remove(self.value.selection());
+    ///
+    pub fn delete_range(&mut self, range: TextRange) -> bool {
+        if !range.is_empty() {
+            self.value.remove(range);
             self.scroll_cursor_to_visible();
             true
         } else {
-            let (ex, ey) = if cx == c_line_width {
+            false
+        }
+    }
+
+    /// Deletes the next char or the current selection.
+    /// Returns true if there was any real change.
+    pub fn delete_next_char(&mut self) -> bool {
+        let range = if self.value.has_selection() {
+            self.selection()
+        } else {
+            let (cx, cy) = self.value.cursor();
+            let c_line_width = self.value.line_width(cy).expect("width");
+            let c_last_line = self.value.len_lines() - 1;
+
+            let (ex, ey) = if cy == c_last_line && cx == c_line_width {
+                (c_line_width, c_last_line)
+            } else if cy != c_last_line && cx == c_line_width {
                 (0, cy + 1)
             } else {
                 (cx + 1, cy)
             };
+            TextRange::new((cx, cy), (ex, ey))
+        };
 
-            let range = TextRange::new((cx, cy), (ex, ey));
-            if !range.is_empty() {
-                self.value.remove(range);
-                self.scroll_cursor_to_visible();
-                true
-            } else {
-                false
-            }
-        }
+        self.delete_range(range)
     }
 
     /// Deletes the previous char or the selection.
     /// Returns true if there was any real change.
     pub fn delete_prev_char(&mut self) -> bool {
-        if self.value.cursor() == (0, 0) {
-            return false;
-        }
-
-        if self.value.has_selection() {
-            self.value.remove(self.value.selection());
-            self.scroll_cursor_to_visible();
-            true
+        let range = if self.value.has_selection() {
+            self.selection()
         } else {
             let (cx, cy) = self.value.cursor();
-            let (sx, sy) = if cx == 0 {
-                let Some(prev_line_width) = self.value.line_width(cy - 1) else {
-                    panic!("invalid_cursor {:?} value {:?}", (cx, cy), self.value);
-                };
+            let (sx, sy) = if cy == 0 && cx == 0 {
+                (0, 0)
+            } else if cy != 0 && cx == 0 {
+                let prev_line_width = self.value.line_width(cy - 1).expect("line_width");
                 (prev_line_width, cy - 1)
             } else {
                 (cx - 1, cy)
             };
 
-            let range = TextRange::new((sx, sy), (cx, cy));
-            if !range.is_empty() {
-                self.value.remove(range);
-                self.scroll_cursor_to_visible();
-                true
-            } else {
-                false
-            }
-        }
+            TextRange::new((sx, sy), (cx, cy))
+        };
+
+        self.delete_range(range)
     }
 
     pub fn delete_next_word(&mut self) -> bool {
-        let (cx, cy) = self.value.cursor();
-        let Some(c_line_width) = self.value.line_width(cy) else {
-            panic!("invalid_cursor: {:?} value {:?}", (cx, cy), self.value);
-        };
-
         if self.value.has_selection() {
-            self.value.remove(self.value.selection());
+            self.value
+                .set_selection(TextRange::new(self.cursor(), self.cursor()));
+        }
+
+        let (cx, cy) = self.value.cursor();
+        let (ex, ey) = self
+            .value
+            .next_word_boundary((cx, cy))
+            .expect("valid_cursor");
+
+        let range = TextRange::new((cx, cy), (ex, ey));
+        if !range.is_empty() {
+            self.value.remove(range);
             self.scroll_cursor_to_visible();
             true
         } else {
-            let (ex, ey) = self
-                .value
-                .next_word_boundary((cx, cy))
-                .expect("valid_cursor");
-
-            let range = TextRange::new((cx, cy), (ex, ey));
-            if !range.is_empty() {
-                self.value.remove(range);
-                self.scroll_cursor_to_visible();
-                true
-            } else {
-                false
-            }
+            false
         }
     }
 
     pub fn delete_prev_word(&mut self) -> bool {
-        if self.value.cursor() == (0, 0) {
-            return false;
+        if self.value.has_selection() {
+            self.value
+                .set_selection(TextRange::new(self.cursor(), self.cursor()));
         }
 
-        if self.value.has_selection() {
-            self.value.remove(self.value.selection());
+        let (cx, cy) = self.value.cursor();
+        let (sx, sy) = self
+            .value
+            .prev_word_boundary((cx, cy))
+            .expect("valid_cursor");
+
+        let range = TextRange::new((sx, sy), (cx, cy));
+        if !range.is_empty() {
+            self.value.remove(range);
             self.scroll_cursor_to_visible();
             true
         } else {
-            let (cx, cy) = self.value.cursor();
-            let (sx, sy) = self
-                .value
-                .prev_word_boundary((cx, cy))
-                .expect("valid_cursor");
-
-            let range = TextRange::new((sx, sy), (cx, cy));
-            if !range.is_empty() {
-                self.value.remove(range);
-                self.scroll_cursor_to_visible();
-                true
-            } else {
-                false
-            }
+            false
         }
     }
 
@@ -1481,7 +1468,9 @@ pub mod core {
         /// Panics if start > end.
         pub fn new(start: (usize, usize), end: (usize, usize)) -> Self {
             // reverse the args, then it works.
-            assert!((start.1, start.0) <= (end.1, end.0));
+            if (start.1, start.0) > (end.1, end.0) {
+                panic!("start {:?} > end {:?}", start, end);
+            }
             TextRange { start, end }
         }
 
