@@ -2,7 +2,6 @@
 //! A text-area with text-styling abilities.
 //!
 use crate::_private::NonExhaustive;
-use crate::input::TextInputStyle;
 use crate::textarea::core::{RopeGraphemes, TextRange};
 use crate::util::MouseFlags;
 use rat_event::util::Outcome;
@@ -1424,6 +1423,7 @@ pub mod graphemes {
 
 pub mod core {
     use crate::textarea::graphemes::{rope_len, RopeGraphemesIdx};
+    #[allow(unused_imports)]
     use log::debug;
     use ropey::iter::Lines;
     use ropey::{Rope, RopeSlice};
@@ -1716,11 +1716,6 @@ pub mod core {
     }
 
     impl StyleMap {
-        /// New mapping
-        pub(crate) fn new() -> Self {
-            Self::default()
-        }
-
         /// Remove all styles.
         pub(crate) fn clear_styles(&mut self) {
             self.styles.clear();

@@ -7,6 +7,8 @@ use crate::_private::NonExhaustive;
 use crate::event::Outcome;
 use crate::util::MouseFlags;
 use crate::util::{next_opt, prev_opt, span_width};
+#[allow(unused_imports)]
+use log::debug;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
