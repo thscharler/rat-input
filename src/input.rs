@@ -10,7 +10,7 @@
 //! The visual cursor must be set separately after rendering.
 //! It is accessible as [TextInputState::screen_cursor()] after rendering.
 //!
-//! Event handling by calling the freestanding fn [crate::masked_input::handle_events].
+//! Event handling by calling the freestanding fn [handle_events].
 //! There's [handle_mouse_events] if you want to override the default key bindings but keep
 //! the mouse behaviour.
 //!

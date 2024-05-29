@@ -1,6 +1,12 @@
 # 0.15.0
 
-* Add TextArea
+* Add TextArea.
+* Add support for 2-wide Emojis. Works ok. Input in Windows-Terminal
+  seems somewhat broken? Alacritty does better, so I think its Windows-Terminal.
+  Or somebody mixes up the events? Simple emojis work though, but the
+  combined ones are jittery and break rendering sometimes ....
+    * Added for TextArea, TextInput and MaskedInput
+* API cleanup between the three text input widgets.
 
 # 0.14.0
 

@@ -55,8 +55,8 @@ pure-rust-locales = "0.8"
 memchr = "2.7.2"
 format_num_pattern = "0.9"
 log = "0.4"
-rat-event = "0.12"
 ropey = "1.6.1"
+rat-event = "0.12"
 
 [dev-dependencies]
 fern = "0.6"
