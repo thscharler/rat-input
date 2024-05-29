@@ -1,6 +1,7 @@
+#![allow(dead_code)]
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Style, Styled, Stylize};
+use ratatui::style::{Style, Stylize};
 use ratatui::text::Text;
 use ratatui::widgets::StatefulWidgetRef;
 
@@ -11,13 +12,13 @@ struct Button<'a> {
 }
 
 struct ButtonState {
-    pub armed: bool,
+    pub(crate) armed: bool,
 }
 
 impl<'a> StatefulWidgetRef for Button<'a> {
     type State = ButtonState;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render_ref(&self, _area: Rect, _buf: &mut Buffer, _state: &mut Self::State) {
         // ...
     }
 }
@@ -28,8 +29,8 @@ struct FocusableButton<'a> {
 }
 
 struct FocusableButtonState {
-    pub widget: ButtonState,
-    pub focus: bool,
+    pub(crate) widget: ButtonState,
+    pub(crate) focus: bool,
 }
 
 impl<'a> StatefulWidgetRef for FocusableButton<'a> {

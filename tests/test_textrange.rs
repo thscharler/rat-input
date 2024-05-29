@@ -1,6 +1,8 @@
 use rat_input::textarea::core::{InputCore, TextRange};
 use std::cmp::Ordering;
+#[allow(unused_imports)]
 use std::hint::black_box;
+#[allow(unused_imports)]
 use std::time::Instant;
 
 fn insert(v: &mut Vec<TextRange>, r: TextRange) {

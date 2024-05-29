@@ -18,6 +18,55 @@ pub use pure_rust_locales::Locale;
 pub mod event {
     pub use rat_event::util::Outcome;
     pub use rat_event::{FocusKeys, HandleEvent, MouseOnly, UsedEvent};
+
+    /// Runs only the navigation events, not any editing.
+    #[derive(Debug)]
+    pub struct ReadOnly;
+
+    /// Result of event handling.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum TextOutcome {
+        /// The given event has not been used at all.
+        NotUsed,
+        /// The event has been recognized, but the result was nil.
+        /// Further processing for this event may stop.
+        Unchanged,
+        /// The event has been recognized and there is some change
+        /// due to it.
+        /// Further processing for this event may stop.
+        /// Rendering the ui is advised.
+        Changed,
+        /// Text content has changed.
+        TextChanged,
+    }
+
+    impl UsedEvent for TextOutcome {
+        fn used_event(&self) -> bool {
+            *self != TextOutcome::NotUsed
+        }
+    }
+
+    // Useful for converting most navigation/edit results.
+    impl From<bool> for TextOutcome {
+        fn from(value: bool) -> Self {
+            if value {
+                TextOutcome::Changed
+            } else {
+                TextOutcome::Unchanged
+            }
+        }
+    }
+
+    impl From<TextOutcome> for Outcome {
+        fn from(value: TextOutcome) -> Self {
+            match value {
+                TextOutcome::NotUsed => Outcome::NotUsed,
+                TextOutcome::Unchanged => Outcome::Unchanged,
+                TextOutcome::Changed => Outcome::Changed,
+                TextOutcome::TextChanged => Outcome::Changed,
+            }
+        }
+    }
 }
 
 mod _private {

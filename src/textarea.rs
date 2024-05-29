@@ -2,10 +2,10 @@
 //! A text-area with text-styling abilities.
 //!
 use crate::_private::NonExhaustive;
+use crate::event::{ReadOnly, TextOutcome};
 use crate::textarea::core::{RopeGraphemes, TextRange};
 use crate::util::MouseFlags;
-use rat_event::util::Outcome;
-use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
+use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::prelude::{BlockExt, Stylize};
@@ -159,7 +159,7 @@ impl<'a> StatefulWidget for TextArea<'a> {
         let select_style = if let Some(select_style) = self.select_style {
             select_style
         } else {
-            self.style.reversed()
+            Style::default().on_yellow()
         };
         let style = if self.focused {
             focus_style
@@ -230,7 +230,7 @@ impl<'a> StatefulWidget for TextArea<'a> {
                         cell.set_style(style);
                     }
 
-                    col += ww;
+                    col += max(ww, 1);
                     cx += 1;
                 }
             } else {
@@ -992,51 +992,6 @@ impl TextAreaState {
     }
 }
 
-/// Result of event handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum TextOutcome {
-    /// The given event has not been used at all.
-    NotUsed,
-    /// The event has been recognized, but the result was nil.
-    /// Further processing for this event may stop.
-    Unchanged,
-    /// The event has been recognized and there is some change
-    /// due to it.
-    /// Further processing for this event may stop.
-    /// Rendering the ui is advised.
-    Changed,
-    /// Text content has changed.
-    TextChanged,
-}
-
-impl UsedEvent for TextOutcome {
-    fn used_event(&self) -> bool {
-        *self != TextOutcome::NotUsed
-    }
-}
-
-// Useful for converting most navigation/edit results.
-impl From<bool> for TextOutcome {
-    fn from(value: bool) -> Self {
-        if value {
-            TextOutcome::Changed
-        } else {
-            TextOutcome::Unchanged
-        }
-    }
-}
-
-impl From<TextOutcome> for Outcome {
-    fn from(value: TextOutcome) -> Self {
-        match value {
-            TextOutcome::NotUsed => Outcome::NotUsed,
-            TextOutcome::Unchanged => Outcome::Unchanged,
-            TextOutcome::Changed => Outcome::Changed,
-            TextOutcome::TextChanged => Outcome::Changed,
-        }
-    }
-}
-
 impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> TextOutcome {
         let mut r = match event {
@@ -1059,6 +1014,10 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextAreaSt
             | ct_event!(keycode release CONTROL-Delete) => TextOutcome::Unchanged,
             _ => TextOutcome::NotUsed,
         };
+        // remap to TextChanged
+        if r == TextOutcome::Changed {
+            r = TextOutcome::TextChanged;
+        }
 
         if r == TextOutcome::NotUsed {
             r = self.handle(event, ReadOnly);
@@ -1069,10 +1028,6 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextAreaSt
         r
     }
 }
-
-/// Runs only the navigation events, not any editing.
-#[derive(Debug)]
-pub struct ReadOnly;
 
 impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: ReadOnly) -> TextOutcome {
@@ -2119,7 +2074,7 @@ pub mod core {
             self.char_pos(char_pos)
         }
 
-        /// Find next word.
+        /// Find prev word.
         pub fn prev_word_boundary(&self, pos: (usize, usize)) -> Option<(usize, usize)> {
             let Some(mut char_pos) = self.char_at(pos) else {
                 return None;
@@ -2222,7 +2177,7 @@ pub mod core {
             }
         }
 
-        /// Grapheme position to char position.
+        /// Returns the first char position for the grapheme position.
         pub fn char_at(&self, pos: (usize, usize)) -> Option<usize> {
             let Some((byte_pos, _)) = self.byte_at(pos) else {
                 return None;

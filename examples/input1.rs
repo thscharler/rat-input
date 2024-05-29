@@ -13,6 +13,8 @@ use rat_input::input::{TextInput, TextInputState};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Style, Stylize};
+use ratatui::text::Span;
+use ratatui::widgets::Widget;
 use ratatui::{Frame, Terminal};
 use std::fs;
 use std::io::{stdout, Stdout};
@@ -26,6 +28,9 @@ fn main() -> Result<(), anyhow::Error> {
     let mut state = State {
         input: Default::default(),
     };
+    state
+        .input
+        .set_value("asdf jklö 1234 (()) // öö 👩🏾‍🏫 👮🏾‍♀️ 💂🏾‍♀️ 👷🏾 🧔🏾‍♀️ 👩🏾‍");
 
     run_ui(&mut data, &mut state)
 }
@@ -151,7 +156,7 @@ fn handle_event(
 
 fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mut State) {
     let l0 = Layout::horizontal([
-        Constraint::Length(14),
+        Constraint::Length(45),
         Constraint::Fill(1),
         Constraint::Fill(1),
     ])
@@ -160,17 +165,21 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
     let l1 = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(1),
+        Constraint::Length(1),
         Constraint::Fill(1),
     ])
     .split(l0[0]);
 
     let input1 = TextInput::default()
         .focused(true)
-        .style(Style::default().black().on_green());
+        .style(Style::default().black().on_dark_gray());
     frame.render_stateful_widget(input1, l1[1], &mut state.input);
-    if let Some(Position { x, y }) = state.input.screen_cursor() {
+    if let Some((x, y)) = state.input.screen_cursor() {
         frame.set_cursor(x, y);
     }
+
+    let rule = Span::from("0123456789_123456789_123456789_123456789_1234");
+    frame.render_widget(rule, l1[2]);
 }
 
 fn handle_input(
@@ -179,5 +188,5 @@ fn handle_input(
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r = HandleEvent::handle(&mut state.input, event, FocusKeys);
-    Ok(r)
+    Ok(r.into())
 }

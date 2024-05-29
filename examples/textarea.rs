@@ -9,11 +9,11 @@ use crossterm::terminal::{
 use crossterm::ExecutableCommand;
 use log::debug;
 use rat_event::ct_event;
-use rat_input::event::{FocusKeys, HandleEvent, Outcome};
+use rat_input::event::{FocusKeys, HandleEvent, Outcome, TextOutcome};
 use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
 use rat_input::statusline::{StatusLine, StatusLineState};
 use rat_input::textarea::core::TextRange;
-use rat_input::textarea::{TextArea, TextAreaState, TextOutcome};
+use rat_input::textarea::{TextArea, TextAreaState};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
