@@ -195,12 +195,8 @@ impl<'a> StatefulWidget for TextInput<'a> {
 
         buf.set_style(area, style);
 
-        let selection = util::clamp_shift(
-            state.value.selection(),
-            state.value.offset(),
-            state.value.width(),
-        );
-
+        let selection = state.value.selection();
+        let ox = state.offset();
         let mut cit = state.value.value().graphemes(true).skip(state.offset());
         let mut col = 0;
         let mut cx = 0;
@@ -211,7 +207,6 @@ impl<'a> StatefulWidget for TextInput<'a> {
 
             let ch = if let Some(c) = cit.next() { c } else { " " };
 
-            let ox = state.offset();
             let tx = cx + ox;
             let style = if selection.contains(&tx) {
                 select_style
@@ -465,7 +460,6 @@ impl TextInputState {
     #[inline]
     pub fn move_to_prev(&mut self, extend_selection: bool) -> bool {
         let c = self.value.cursor().saturating_sub(1);
-
         self.value.set_cursor(c, extend_selection)
     }
 
@@ -746,6 +740,7 @@ pub mod core {
         }
 
         /// Offset
+        #[inline]
         pub fn offset(&self) -> usize {
             self.offset
         }
@@ -764,11 +759,13 @@ pub mod core {
         }
 
         /// Display width
+        #[inline]
         pub fn width(&self) -> usize {
             self.width
         }
 
         /// Display width
+        #[inline]
         pub fn set_width(&mut self, width: usize) {
             self.width = width;
 
@@ -779,10 +776,10 @@ pub mod core {
 
         /// Cursor position as grapheme-idx. Moves the cursor to the new position,
         /// but can leave the current cursor position as anchor of the selection.
-        pub fn set_cursor(&mut self, value: usize, extend_selection: bool) -> bool {
+        pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) -> bool {
             let old_cursor = self.cursor;
 
-            let c = min(self.len, value);
+            let c = min(self.len, cursor);
 
             self.cursor = c;
 
@@ -800,16 +797,19 @@ pub mod core {
         }
 
         /// Cursor position as grapheme-idx.
+        #[inline]
         pub fn cursor(&self) -> usize {
             self.cursor
         }
 
         /// Selection anchor
+        #[inline]
         pub fn anchor(&self) -> usize {
             self.anchor
         }
 
         /// Set the value. Resets cursor and anchor to 0.
+        #[inline]
         pub fn set_value<S: Into<String>>(&mut self, s: S) {
             self.value = s.into();
             self.len = self.value.graphemes(true).count();
@@ -819,36 +819,43 @@ pub mod core {
         }
 
         /// Value
+        #[inline]
         pub fn value(&self) -> &str {
             self.value.as_str()
         }
 
         /// Value as grapheme iterator.
+        #[inline]
         pub fn value_graphemes(&self) -> Graphemes<'_> {
             self.value.graphemes(true)
         }
 
         /// Clear
+        #[inline]
         pub fn clear(&mut self) {
             self.set_value("");
         }
 
         /// Empty
+        #[inline]
         pub fn is_empty(&self) -> bool {
             self.value.is_empty()
         }
 
         /// Value lenght as grapheme-count
+        #[inline]
         pub fn len(&self) -> usize {
             self.len
         }
 
         /// Anchor is active
+        #[inline]
         pub fn has_selection(&self) -> bool {
             self.anchor != self.cursor
         }
 
         /// Selection.
+        #[inline]
         pub fn selection(&self) -> Range<usize> {
             if self.cursor < self.anchor {
                 self.cursor..self.anchor

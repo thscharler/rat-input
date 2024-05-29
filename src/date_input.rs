@@ -3,7 +3,7 @@
 //!
 
 use crate::_private::NonExhaustive;
-use crate::event::Outcome;
+use crate::event::TextOutcome;
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
 use chrono::format::{Fixed, Item, Numeric, Pad, StrftimeItems};
 use chrono::{Datelike, Days, Local, Months, NaiveDate};
@@ -11,7 +11,7 @@ use chrono::{Datelike, Days, Local, Months, NaiveDate};
 use log::debug;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, StatefulWidget};
 use std::fmt;
@@ -106,8 +106,8 @@ impl<'a> DateInput<'a> {
     /// Renders the content differently if invalid.
     /// Uses the invalid style instead of the base style for rendering.
     #[inline]
-    pub fn valid(mut self, valid: bool) -> Self {
-        self.widget = self.widget.valid(valid);
+    pub fn invalid(mut self, invalid: bool) -> Self {
+        self.widget = self.widget.invalid(invalid);
         self
     }
 }
@@ -151,7 +151,7 @@ impl DateInputState {
     /// Reset to empty.
     #[inline]
     pub fn reset(&mut self) {
-        self.widget.reset();
+        self.widget.clear();
     }
 
     /// chrono format string.
@@ -307,12 +307,12 @@ impl DateInputState {
     /// Select all text.
     #[inline]
     pub fn select_all(&mut self) {
-        self.widget.select_all()
+        self.widget.select_all();
     }
 
     /// Screen position of the cursor for rendering.
     #[inline]
-    pub fn screen_cursor(&self) -> Option<Position> {
+    pub fn screen_cursor(&self) -> Option<(u16, u16)> {
         self.widget.screen_cursor()
     }
 }
@@ -336,13 +336,13 @@ impl DateInputState {
 #[derive(Debug)]
 pub struct ConvenientKeys;
 
-impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInputState {
-    fn handle(&mut self, event: &crossterm::event::Event, _keymap: ConvenientKeys) -> Outcome {
+impl HandleEvent<crossterm::event::Event, ConvenientKeys, TextOutcome> for DateInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: ConvenientKeys) -> TextOutcome {
         let r = {
             match event {
                 ct_event!(key press 'h') => {
                     self.set_value(Local::now().date_naive());
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
                 ct_event!(key press 'l') => {
                     let date = Local::now()
@@ -352,7 +352,7 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         .with_day(1)
                         .expect("day");
                     self.set_value(date);
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
                 ct_event!(key press SHIFT-'L') => {
                     let date = Local::now()
@@ -362,13 +362,13 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         .checked_sub_days(Days::new(1))
                         .expect("day");
                     self.set_value(date);
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
 
                 ct_event!(key press 'm') => {
                     let date = Local::now().date_naive().with_day(1).expect("day");
                     self.set_value(date);
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
                 ct_event!(key press SHIFT-'M') => {
                     let date = Local::now()
@@ -380,7 +380,7 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         .checked_sub_days(Days::new(1))
                         .expect("day");
                     self.set_value(date);
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
 
                 ct_event!(key press 'n') => {
@@ -391,7 +391,7 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         .with_day(1)
                         .expect("day");
                     self.set_value(date);
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
                 ct_event!(key press SHIFT-'N') => {
                     let date = Local::now()
@@ -403,7 +403,7 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         .checked_sub_days(Days::new(1))
                         .expect("day");
                     self.set_value(date);
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
 
                 ct_event!(key press 'j') => {
@@ -411,14 +411,14 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         let date = date.checked_add_months(Months::new(1)).expect("month");
                         self.set_value(date);
                     }
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
                 ct_event!(key press SHIFT-'J') => {
                     if let Ok(date) = self.value() {
                         let date = date.with_year(date.year() + 1).expect("year");
                         self.set_value(date);
                     }
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
 
                 ct_event!(key press 'k') => {
@@ -426,14 +426,14 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         let date = date.checked_sub_months(Months::new(1)).expect("month");
                         self.set_value(date);
                     }
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
                 ct_event!(key press SHIFT-'K') => {
                     if let Ok(date) = self.value() {
                         let date = date.with_year(date.year() - 1).expect("year");
                         self.set_value(date);
                     }
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
 
                 ct_event!(key press 'a'|'b') => {
@@ -441,7 +441,7 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                         let date = date.with_month(1).expect("month").with_day(1).expect("day");
                         self.set_value(date);
                     }
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
                 ct_event!(key press 'e') => {
                     if let Ok(date) = self.value() {
@@ -452,13 +452,13 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
                             .expect("day");
                         self.set_value(date);
                     }
-                    Outcome::Changed
+                    TextOutcome::Changed
                 }
-                _ => Outcome::NotUsed,
+                _ => TextOutcome::NotUsed,
             }
         };
 
-        if r == Outcome::NotUsed {
+        if r == TextOutcome::NotUsed {
             self.handle(event, FocusKeys)
         } else {
             r
@@ -466,14 +466,14 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, Outcome> for DateInput
     }
 }
 
-impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for DateInputState {
-    fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> Outcome {
+impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for DateInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> TextOutcome {
         self.widget.handle(event, FocusKeys)
     }
 }
 
-impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for DateInputState {
-    fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> Outcome {
+impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for DateInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
         self.widget.handle(event, MouseOnly)
     }
 }
@@ -485,7 +485,7 @@ pub fn handle_events(
     state: &mut DateInputState,
     focus: bool,
     event: &crossterm::event::Event,
-) -> Outcome {
+) -> TextOutcome {
     if focus {
         HandleEvent::handle(state, event, FocusKeys)
     } else {
@@ -494,6 +494,9 @@ pub fn handle_events(
 }
 
 /// Handle only mouse-events.
-pub fn handle_mouse_events(state: &mut DateInputState, event: &crossterm::event::Event) -> Outcome {
+pub fn handle_mouse_events(
+    state: &mut DateInputState,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
     HandleEvent::handle(state, event, MouseOnly)
 }

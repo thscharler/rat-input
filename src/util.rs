@@ -39,22 +39,6 @@ pub(crate) fn next(select: usize, change: usize, max: usize) -> usize {
     min(select + change, max)
 }
 
-/// Constrains the range to the visible range and shifts the result by offset.
-pub(crate) fn clamp_shift(range: Range<usize>, offset: usize, width: usize) -> Range<usize> {
-    let start = if range.start < offset {
-        offset
-    } else {
-        range.start
-    };
-    let end = if range.end > offset + width {
-        offset + width
-    } else {
-        range.end
-    };
-
-    start - offset..end - offset
-}
-
 ///
 pub(crate) fn gr_len(s: &str) -> usize {
     s.graphemes(true).count()
@@ -283,15 +267,6 @@ pub(crate) fn split3(value: &str, selection: Range<usize>) -> (&str, &str, &str)
         &value[byte_selection_start..byte_selection_end],
         &value[byte_selection_end..value.len()],
     )
-}
-
-/// Is the first char alphanumeric?
-pub(crate) fn is_alphanumeric(s: &str) -> bool {
-    if let Some(c) = s.chars().next() {
-        c.is_alphanumeric()
-    } else {
-        false
-    }
 }
 
 /// Small helper for handling mouse-events.

@@ -70,10 +70,10 @@
 //!
 
 use crate::_private::NonExhaustive;
-use crate::event::Outcome;
+use crate::event::{ReadOnly, TextOutcome};
+use crate::input::TextInputState;
 use crate::masked_input::core::InputMaskCore;
 use crate::util;
-use crate::util::clamp_shift;
 use crate::util::MouseFlags;
 use format_num_pattern::NumberSymbols;
 #[allow(unused_imports)]
@@ -84,6 +84,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
 use ratatui::widgets::{Block, StatefulWidget, WidgetRef};
+use std::cmp::{max, min};
 use std::fmt;
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
@@ -98,7 +99,7 @@ pub struct MaskedInput<'a> {
     select_style: Option<Style>,
     invalid_style: Option<Style>,
     focused: bool,
-    valid: bool,
+    invalid: bool,
 }
 
 /// Combined style.
@@ -114,9 +115,6 @@ pub struct MaskedInputStyle {
 /// State of the input-mask.
 #[derive(Debug, Clone)]
 pub struct MaskedInputState {
-    /// The position of the cursor in screen coordinates.
-    /// Can be directly used for [Frame::set_cursor()]
-    pub cursor: Option<Position>,
     /// Area with block
     pub area: Rect,
     /// Area
@@ -150,8 +148,8 @@ impl<'a> Default for MaskedInput<'a> {
             focus_style: Default::default(),
             select_style: Default::default(),
             invalid_style: Default::default(),
-            focused: true,
-            valid: true,
+            focused: false,
+            invalid: false,
         }
     }
 }
@@ -229,8 +227,8 @@ impl<'a> MaskedInput<'a> {
     /// Renders the content differently if invalid.
     /// Uses the invalid style instead of the base style for rendering.
     #[inline]
-    pub fn valid(mut self, valid: bool) -> Self {
-        self.valid = valid;
+    pub fn invalid(mut self, invalid: bool) -> Self {
+        self.invalid = invalid;
         self
     }
 }
@@ -244,6 +242,8 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
         state.value.set_width(state.inner.width as usize);
 
         self.block.render_ref(area, buf);
+
+        let area = state.inner.intersection(buf.area);
 
         if self.focused {
             state.value.render_value();
@@ -263,7 +263,7 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
         let select_style = if let Some(select_style) = self.select_style {
             select_style
         } else {
-            self.style.reversed()
+            Style::default().on_yellow()
         };
         let invalid_style = if let Some(invalid_style) = self.invalid_style {
             invalid_style
@@ -272,56 +272,58 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
         };
 
         let (style, select_style) = if self.focused {
-            if self.valid {
-                (focus_style, select_style)
-            } else {
+            if self.invalid {
                 (
                     focus_style.patch(invalid_style),
                     select_style.patch(invalid_style),
                 )
+            } else {
+                (focus_style, select_style)
             }
         } else {
-            if self.valid {
-                (self.style, self.style)
-            } else {
+            if self.invalid {
                 (
                     self.style.patch(invalid_style),
                     self.style.patch(invalid_style),
                 )
+            } else {
+                (self.style, self.style)
             }
         };
 
-        let area = state.inner.intersection(buf.area);
-
-        let selection = clamp_shift(
-            state.value.selection(),
-            state.value.offset(),
-            state.value.width(),
-        );
-
+        let selection = state.value.selection();
+        let ox = state.offset();
         let mut cit = state.value.rendered().graphemes(true).skip(state.offset());
-        for col in 0..area.width as usize {
-            let cell = buf.get_mut(area.x + col as u16, area.y);
-            if let Some(c) = cit.next() {
-                cell.set_symbol(c);
-            } else {
-                cell.set_char(' ');
+        let mut col = 0;
+        let mut cx = 0;
+        loop {
+            if col >= area.width {
+                break;
             }
 
-            if selection.contains(&col) {
-                cell.set_style(select_style);
+            let ch = if let Some(c) = cit.next() { c } else { " " };
+
+            let tx = cx + ox;
+            let style = if selection.contains(&tx) {
+                select_style
             } else {
+                style
+            };
+
+            let cell = buf.get_mut(area.x + col, area.y);
+            cell.set_symbol(ch);
+            cell.set_style(style);
+
+            // extra cells for wide chars.
+            let ww = unicode_display_width::width(ch) as u16;
+            for x in 1..ww {
+                let cell = buf.get_mut(area.x + col + x, area.y);
+                cell.set_symbol("");
                 cell.set_style(style);
             }
-        }
 
-        if self.focused {
-            state.cursor = Some(Position::new(
-                state.inner.x + (state.value.cursor() - state.value.offset()) as u16,
-                state.inner.y,
-            ));
-        } else {
-            state.cursor = None;
+            col += max(ww, 1);
+            cx += 1;
         }
     }
 }
@@ -329,7 +331,6 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
 impl Default for MaskedInputState {
     fn default() -> Self {
         Self {
-            cursor: Default::default(),
             area: Default::default(),
             inner: Default::default(),
             mouse: Default::default(),
@@ -337,125 +338,6 @@ impl Default for MaskedInputState {
             non_exhaustive: NonExhaustive,
         }
     }
-}
-
-impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MaskedInputState {
-    fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> Outcome {
-        let r = 'f: {
-            match event {
-                ct_event!(keycode press Left) => self.move_to_prev(false),
-                ct_event!(keycode press Right) => self.move_to_next(false),
-                ct_event!(keycode press CONTROL-Left) => {
-                    let pos = self.prev_word_boundary();
-                    self.set_cursor(pos, false);
-                }
-                ct_event!(keycode press CONTROL-Right) => {
-                    let pos = self.next_word_boundary();
-                    self.set_cursor(pos, false);
-                }
-                ct_event!(keycode press Home) => self.set_cursor(0, false),
-                ct_event!(keycode press End) => self.set_cursor(self.len(), false),
-                ct_event!(keycode press SHIFT-Left) => self.move_to_prev(true),
-                ct_event!(keycode press SHIFT-Right) => self.move_to_next(true),
-                ct_event!(keycode press CONTROL_SHIFT-Left) => {
-                    let pos = self.prev_word_boundary();
-                    self.set_cursor(pos, true);
-                }
-                ct_event!(keycode press CONTROL_SHIFT-Right) => {
-                    let pos = self.next_word_boundary();
-                    self.set_cursor(pos, true);
-                }
-                ct_event!(keycode press SHIFT-Home) => self.set_cursor(0, true),
-                ct_event!(keycode press SHIFT-End) => self.set_cursor(self.len(), true),
-                ct_event!(key press CONTROL-'a') => self.set_selection(0, self.len()),
-                ct_event!(keycode press Backspace) => self.delete_prev_char(),
-                ct_event!(keycode press Delete) => self.delete_next_char(),
-                ct_event!(keycode press CONTROL-Backspace) => {
-                    let prev = self.prev_word_boundary();
-                    self.remove(prev..self.cursor());
-                }
-                ct_event!(keycode press CONTROL-Delete) => {
-                    let next = self.next_word_boundary();
-                    self.remove(self.cursor()..next);
-                }
-                ct_event!(key press CONTROL-'d') => self.set_value(self.default_value()),
-                ct_event!(keycode press CONTROL_SHIFT-Backspace) => self.remove(0..self.cursor()),
-                ct_event!(keycode press CONTROL_SHIFT-Delete) => {
-                    self.remove(self.cursor()..self.len())
-                }
-                ct_event!(key press c) | ct_event!(key press SHIFT-c) => self.insert_char(*c),
-                _ => break 'f Outcome::NotUsed,
-            }
-            Outcome::Changed
-        };
-
-        match r {
-            Outcome::NotUsed => HandleEvent::handle(self, event, MouseOnly),
-            v => v,
-        }
-    }
-}
-
-impl HandleEvent<crossterm::event::Event, MouseOnly, Outcome> for MaskedInputState {
-    fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> Outcome {
-        let r = match event {
-            ct_event!(mouse down Left for column,row) => {
-                if self.inner.contains(Position::new(*column, *row)) {
-                    self.mouse.set_drag();
-                    let c = column - self.inner.x;
-                    if self.set_screen_cursor(c as isize, false) {
-                        Outcome::Changed
-                    } else {
-                        Outcome::Unchanged
-                    }
-                } else {
-                    Outcome::NotUsed
-                }
-            }
-            ct_event!(mouse drag Left for column, _row) => {
-                if self.mouse.do_drag() {
-                    let c = (*column as isize) - (self.inner.x as isize);
-                    if self.set_screen_cursor(c, true) {
-                        Outcome::Changed
-                    } else {
-                        Outcome::Unchanged
-                    }
-                } else {
-                    Outcome::NotUsed
-                }
-            }
-            ct_event!(mouse moved) => {
-                self.mouse.clear_drag();
-                Outcome::NotUsed
-            }
-            _ => Outcome::NotUsed,
-        };
-
-        r
-    }
-}
-
-/// Handle all events.
-/// Text events are only processed if focus is true.
-/// Mouse events are processed if they are in range.
-pub fn handle_events(
-    state: &mut MaskedInputState,
-    focus: bool,
-    event: &crossterm::event::Event,
-) -> Outcome {
-    if focus {
-        state.handle(event, FocusKeys)
-    } else {
-        state.handle(event, MouseOnly)
-    }
-}
-
-/// Handle only mouse-events.
-pub fn handle_mouse_events(
-    state: &mut MaskedInputState,
-    event: &crossterm::event::Event,
-) -> Outcome {
-    HandleEvent::handle(state, event, MouseOnly)
 }
 
 impl MaskedInputState {
@@ -474,8 +356,13 @@ impl MaskedInputState {
 
     /// Reset to empty.
     #[inline]
-    pub fn reset(&mut self) {
-        self.value.reset();
+    pub fn clear(&mut self) -> bool {
+        if self.is_empty() {
+            false
+        } else {
+            self.value.clear();
+            true
+        }
     }
 
     /// Offset shown.
@@ -490,10 +377,16 @@ impl MaskedInputState {
         self.value.set_offset(offset);
     }
 
+    /// Cursor position
+    #[inline]
+    pub fn cursor(&self) -> usize {
+        self.value.cursor()
+    }
+
     /// Set the cursor position, reset selection.
     #[inline]
-    pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) {
-        self.value.set_cursor(cursor, extend_selection);
+    pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) -> bool {
+        self.value.set_cursor(cursor, extend_selection)
     }
 
     /// Place cursor at decimal separator, if any. 0 otherwise.
@@ -502,10 +395,10 @@ impl MaskedInputState {
         self.value.set_default_cursor();
     }
 
-    /// Cursor position
+    /// Selection anchor.
     #[inline]
-    pub fn cursor(&self) -> usize {
-        self.value.cursor()
+    pub fn anchor(&self) -> usize {
+        self.value.anchor()
     }
 
     /// Set the display mask. This text is used for parts that have
@@ -638,145 +531,416 @@ impl MaskedInputState {
 
     /// Selection
     #[inline]
-    pub fn set_selection(&mut self, anchor: usize, cursor: usize) {
-        self.value.set_cursor(anchor, false);
-        self.value.set_cursor(cursor, true);
-    }
-
-    /// Selection
-    #[inline]
-    pub fn select_all(&mut self) {
-        // the other way round it fails if width is 0.
-        self.value.set_cursor(self.value.len(), false);
-        self.value.set_cursor(0, true);
-    }
-
-    /// Selection
-    #[inline]
     pub fn selection(&self) -> Range<usize> {
         self.value.selection()
     }
 
     /// Selection
     #[inline]
-    pub fn selection_str(&self) -> &str {
+    pub fn set_selection(&mut self, anchor: usize, cursor: usize) -> bool {
+        let old_selection = self.value.selection();
+
+        self.value.set_cursor(anchor, false);
+        self.value.set_cursor(cursor, true);
+
+        old_selection != self.value.selection()
+    }
+
+    /// Selection
+    #[inline]
+    pub fn select_all(&mut self) -> bool {
+        let old_selection = self.value.selection();
+
+        // the other way round it fails if width is 0.
+        self.value.set_cursor(self.value.len(), false);
+        self.value.set_cursor(0, true);
+
+        old_selection != self.value.selection()
+    }
+
+    /// Selection
+    #[inline]
+    pub fn selected_value(&self) -> &str {
         util::split3(self.value.value(), self.value.selection()).1
     }
 
-    /// Previous word boundary.
+    /// Insert a char at the current position.
     #[inline]
-    pub fn prev_word_boundary(&self) -> usize {
-        self.value.prev_word_boundary()
+    pub fn insert_char(&mut self, c: char) -> bool {
+        if self.value.has_selection() {
+            self.value.remove_selection(self.value.selection());
+        }
+        self.value.advance_cursor(c);
+        self.value.insert_char(c);
+        true
     }
 
-    /// Next word boundary.
+    /// Remove the selected range. The text will be replaced with the default value
+    /// as defined by the mask.
     #[inline]
-    pub fn next_word_boundary(&self) -> usize {
-        self.value.next_word_boundary()
+    pub fn delete_range(&mut self, range: Range<usize>) -> bool {
+        if range.is_empty() {
+            false
+        } else {
+            self.value.remove_selection(range);
+            true
+        }
+    }
+
+    /// Deletes the next word.
+    #[inline]
+    pub fn delete_next_word(&mut self) -> bool {
+        if self.value.has_selection() {
+            self.delete_range(self.value.selection())
+        } else {
+            let cp = self.value.cursor();
+            if let Some(ep) = self.value.next_word_boundary(cp) {
+                self.delete_range(cp..ep)
+            } else {
+                false
+            }
+        }
+    }
+
+    /// Deletes the given range.
+    #[inline]
+    pub fn delete_prev_word(&mut self) -> bool {
+        if self.value.has_selection() {
+            self.delete_range(self.value.selection())
+        } else {
+            let cp = self.value.cursor();
+            if let Some(sp) = self.value.prev_word_boundary(cp) {
+                self.delete_range(sp..cp)
+            } else {
+                false
+            }
+        }
+    }
+
+    /// Delete the char before the cursor.
+    #[inline]
+    pub fn delete_prev_char(&mut self) -> bool {
+        if self.value.is_select_all() {
+            self.value.clear();
+            true
+        } else if self.value.has_selection() {
+            self.value.remove_selection(self.value.selection());
+            true
+        } else if self.value.cursor() > 0 {
+            self.value.remove_prev();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Delete the char after the cursor.
+    #[inline]
+    pub fn delete_next_char(&mut self) -> bool {
+        if self.value.is_select_all() {
+            self.value.clear();
+            true
+        } else if self.value.has_selection() {
+            self.value.remove_selection(self.value.selection());
+            true
+        } else if self.value.cursor() < self.value.len() {
+            self.value.remove_next();
+            true
+        } else {
+            false
+        }
+    }
+
+    #[inline]
+    pub fn move_to_next_word(&mut self, extend_selection: bool) -> bool {
+        let cp = self.value.cursor();
+        if let Some(cp) = self.value.next_word_boundary(cp) {
+            self.value.set_cursor(cp, extend_selection)
+        } else {
+            false
+        }
+    }
+
+    #[inline]
+    pub fn move_to_prev_word(&mut self, extend_selection: bool) -> bool {
+        let cp = self.value.cursor();
+        if let Some(cp) = self.value.prev_word_boundary(cp) {
+            self.value.set_cursor(cp, extend_selection)
+        } else {
+            false
+        }
+    }
+
+    /// Move to the next char.
+    #[inline]
+    pub fn move_to_next(&mut self, extend_selection: bool) -> bool {
+        let c = min(self.value.cursor() + 1, self.value.len());
+        self.value.set_cursor(c, extend_selection)
+    }
+
+    /// Move to the previous char.
+    #[inline]
+    pub fn move_to_prev(&mut self, extend_selection: bool) -> bool {
+        let c = self.value.cursor().saturating_sub(1);
+        self.value.set_cursor(c, extend_selection)
+    }
+
+    /// Start of line
+    #[inline]
+    pub fn move_to_line_start(&mut self, extend_selection: bool) -> bool {
+        let c = 0;
+        self.value.set_cursor(c, extend_selection)
+    }
+
+    // End of line
+    #[inline]
+    pub fn move_to_line_end(&mut self, extend_selection: bool) -> bool {
+        let c = self.value.len();
+        self.value.set_cursor(c, extend_selection)
+    }
+
+    /// Converts a grapheme based position to a screen position
+    /// relative to the widget area.
+    pub fn to_screen_col(&self, pos: usize) -> Option<u16> {
+        let px = pos;
+        let ox = self.value.offset();
+
+        let mut sx = 0;
+        let line = self.value.value_graphemes();
+        for c in line.skip(ox).take(px - ox) {
+            sx += unicode_display_width::width(c) as usize;
+        }
+
+        Some(sx as u16)
+    }
+
+    /// Converts from a widget relative screen coordinate to a grapheme index.
+    /// x is the relative screen position.
+    pub fn from_screen_col(&self, x: usize) -> Option<usize> {
+        let mut cx = 0;
+        let ox = self.value.offset();
+
+        let line = self.value.value_graphemes();
+        let mut test = 0;
+        for c in line.skip(ox) {
+            if test >= x {
+                break;
+            }
+
+            test += unicode_display_width::width(c) as usize;
+
+            cx += 1;
+        }
+
+        Some(cx + ox)
     }
 
     /// Set the cursor position from a screen position relative to the origin
     /// of the widget. This value can be negative, which selects a currently
     /// not visible position and scrolls to it.
     #[inline]
-    pub fn set_screen_cursor(&mut self, rpos: isize, extend_selection: bool) -> bool {
-        let pos = if rpos < 0 {
-            self.value.offset().saturating_sub(-rpos as usize)
+    pub fn set_screen_cursor(&mut self, cursor: isize, extend_selection: bool) -> bool {
+        let sc = cursor;
+
+        let c = if sc < 0 {
+            self.value.offset().saturating_sub(-sc as usize)
         } else {
-            self.value.offset() + rpos as usize
+            if let Some(c) = self.from_screen_col(sc as usize) {
+                c
+            } else {
+                self.value.len()
+            }
         };
 
         let old_cursor = self.value.cursor();
         let old_anchor = self.value.anchor();
 
-        self.value.set_cursor(pos, extend_selection);
+        self.value.set_cursor(c, extend_selection);
 
         old_cursor != self.value.cursor() || old_anchor != self.value.anchor()
     }
 
     /// The current text cursor as an absolute screen position.
     #[inline]
-    pub fn screen_cursor(&self) -> Option<Position> {
-        self.cursor
-    }
+    pub fn screen_cursor(&self) -> Option<(u16, u16)> {
+        let cx = self.value.cursor();
+        let ox = self.value.offset();
 
-    /// Move to the next char.
-    #[inline]
-    pub fn move_to_next(&mut self, extend_selection: bool) {
-        if !extend_selection && self.value.has_selection() {
-            let c = self.value.selection().end;
-            self.value.set_cursor(c, false);
-        } else if self.value.cursor() < self.value.len() {
-            self.value
-                .set_cursor(self.value.cursor() + 1, extend_selection);
-        }
-    }
-
-    /// Move to the previous char.
-    #[inline]
-    pub fn move_to_prev(&mut self, extend_selection: bool) {
-        if !extend_selection && self.value.has_selection() {
-            let c = self.value.selection().start;
-            self.value.set_cursor(c, false);
-        } else if self.value.cursor() > 0 {
-            self.value
-                .set_cursor(self.value.cursor() - 1, extend_selection);
-        }
-    }
-
-    /// Insert a char at the current position.
-    #[inline]
-    pub fn insert_char(&mut self, c: char) {
-        if self.value.has_selection() {
-            self.value.remove_selection(self.value.selection());
-        }
-        self.value.advance_cursor(c);
-        self.value.insert_char(c);
-    }
-
-    /// Remove the selected range. The text will be replaced with the default value
-    /// as defined by the mask.
-    #[inline]
-    pub fn remove(&mut self, range: Range<usize>) {
-        self.value.remove_selection(range);
-    }
-
-    /// Delete the char before the cursor.
-    #[inline]
-    pub fn delete_prev_char(&mut self) {
-        if self.value.is_select_all() {
-            self.value.reset();
-        } else if self.value.has_selection() {
-            self.value.remove_selection(self.value.selection());
-        } else if self.value.cursor() > 0 {
-            self.value.remove_prev();
-        }
-    }
-
-    /// Delete the char after the cursor.
-    #[inline]
-    pub fn delete_next_char(&mut self) {
-        if self.value.is_select_all() {
-            self.value.reset();
-        } else if self.value.has_selection() {
-            self.value.remove_selection(self.value.selection());
-        } else if self.value.cursor() < self.value.len() {
-            self.value.remove_next();
+        if cx < ox {
+            None
+        } else if cx > ox + self.inner.width as usize {
+            None
+        } else {
+            let sc = self.to_screen_col(cx).expect("valid_cursor");
+            Some((self.inner.x + sc, self.inner.y))
         }
     }
 }
 
+impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for MaskedInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> TextOutcome {
+        let mut r = match event {
+            ct_event!(key press c)
+            | ct_event!(key press SHIFT-c)
+            | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c).into(),
+            ct_event!(keycode press Backspace) => self.delete_prev_char().into(),
+            ct_event!(keycode press Delete) => self.delete_next_char().into(),
+            ct_event!(keycode press CONTROL-Backspace) => self.delete_prev_word().into(),
+            ct_event!(keycode press CONTROL-Delete) => self.delete_next_word().into(),
+            ct_event!(key press CONTROL-'d') => {
+                self.set_value(self.default_value());
+                true.into()
+            }
+
+            ct_event!(key release _)
+            | ct_event!(key release SHIFT-_)
+            | ct_event!(key release CONTROL_ALT-_)
+            | ct_event!(keycode release Backspace)
+            | ct_event!(keycode release Delete)
+            | ct_event!(keycode release CONTROL-Backspace)
+            | ct_event!(keycode release CONTROL-Delete)
+            | ct_event!(key release CONTROL-'d') => TextOutcome::Unchanged,
+
+            _ => TextOutcome::NotUsed,
+        };
+        // remap to TextChanged
+        if r == TextOutcome::Changed {
+            r = TextOutcome::TextChanged;
+        }
+
+        if r == TextOutcome::NotUsed {
+            r = self.handle(event, ReadOnly);
+        }
+        if r == TextOutcome::NotUsed {
+            r = self.handle(event, MouseOnly);
+        }
+        r
+    }
+}
+
+impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for MaskedInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: ReadOnly) -> TextOutcome {
+        let mut r = match event {
+            ct_event!(keycode press Left) => self.move_to_prev(false).into(),
+            ct_event!(keycode press Right) => self.move_to_next(false).into(),
+            ct_event!(keycode press CONTROL-Left) => self.move_to_prev_word(false).into(),
+            ct_event!(keycode press CONTROL-Right) => self.move_to_next_word(false).into(),
+            ct_event!(keycode press Home) => self.move_to_line_start(false).into(),
+            ct_event!(keycode press End) => self.move_to_line_end(false).into(),
+            ct_event!(keycode press SHIFT-Left) => self.move_to_prev(true).into(),
+            ct_event!(keycode press SHIFT-Right) => self.move_to_next(true).into(),
+            ct_event!(keycode press CONTROL_SHIFT-Left) => self.move_to_prev_word(true).into(),
+            ct_event!(keycode press CONTROL_SHIFT-Right) => self.move_to_next_word(true).into(),
+            ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true).into(),
+            ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true).into(),
+            ct_event!(key press CONTROL-'a') => self.set_selection(0, self.len()).into(),
+
+            ct_event!(keycode release Left)
+            | ct_event!(keycode release Right)
+            | ct_event!(keycode release CONTROL-Left)
+            | ct_event!(keycode release CONTROL-Right)
+            | ct_event!(keycode release Home)
+            | ct_event!(keycode release End)
+            | ct_event!(keycode release SHIFT-Left)
+            | ct_event!(keycode release SHIFT-Right)
+            | ct_event!(keycode release CONTROL_SHIFT-Left)
+            | ct_event!(keycode release CONTROL_SHIFT-Right)
+            | ct_event!(keycode release SHIFT-Home)
+            | ct_event!(keycode release SHIFT-End)
+            | ct_event!(key release CONTROL-'a') => TextOutcome::Unchanged,
+
+            _ => TextOutcome::NotUsed,
+        };
+
+        if r == TextOutcome::NotUsed {
+            r = self.handle(event, MouseOnly);
+        }
+        r
+    }
+}
+
+impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for MaskedInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
+        let r = match event {
+            ct_event!(mouse down Left for column,row) => {
+                if self.inner.contains(Position::new(*column, *row)) {
+                    self.mouse.set_drag();
+                    let c = column - self.inner.x;
+                    self.set_screen_cursor(c as isize, false).into()
+                } else {
+                    TextOutcome::NotUsed
+                }
+            }
+            ct_event!(mouse drag Left for column, _row) => {
+                if self.mouse.do_drag() {
+                    let c = (*column as isize) - (self.inner.x as isize);
+                    self.set_screen_cursor(c, true).into()
+                } else {
+                    TextOutcome::NotUsed
+                }
+            }
+            ct_event!(mouse moved) => {
+                self.mouse.clear_drag();
+                TextOutcome::NotUsed
+            }
+            _ => TextOutcome::NotUsed,
+        };
+
+        r
+    }
+}
+
+/// Handle all events.
+/// Text events are only processed if focus is true.
+/// Mouse events are processed if they are in range.
+pub fn handle_events(
+    state: &mut MaskedInputState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
+    if focus {
+        state.handle(event, FocusKeys)
+    } else {
+        state.handle(event, MouseOnly)
+    }
+}
+
+/// Handle only navigation events.
+/// Text events are only processed if focus is true.
+/// Mouse events are processed if they are in range.
+pub fn handle_readonly_events(
+    state: &mut TextInputState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
+    if focus {
+        state.handle(event, ReadOnly)
+    } else {
+        state.handle(event, MouseOnly)
+    }
+}
+
+/// Handle only mouse-events.
+pub fn handle_mouse_events(
+    state: &mut MaskedInputState,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
+    state.handle(event, MouseOnly)
+}
+
 pub mod core {
     use crate::util;
+    use crate::util::gr_len;
     use format_num_pattern as number;
     use format_num_pattern::{CurrencySym, NumberFormat, NumberSymbols};
     #[allow(unused_imports)]
     use log::debug;
+    use std::cmp::min;
     use std::fmt::{Debug, Display, Formatter};
     use std::iter::{once, repeat_with};
     use std::ops::Range;
     use std::{fmt, mem};
-    use unicode_segmentation::UnicodeSegmentation;
+    use unicode_segmentation::{Graphemes, UnicodeSegmentation};
 
     /// Edit direction for part of a mask.
     /// Numeric values can switch between right-to-left (integer part) and left-to-right (fraction).
@@ -1420,14 +1584,6 @@ pub mod core {
             &self.mask
         }
 
-        /// Reset value but not the mask and width.
-        /// Resets offset and cursor position too.
-        pub fn reset(&mut self) {
-            self.offset = 0;
-            self.set_value(MaskToken::empty_section(&self.mask));
-            self.set_default_cursor();
-        }
-
         /// Offset
         pub fn offset(&self) -> usize {
             self.offset
@@ -1463,52 +1619,20 @@ pub mod core {
             }
         }
 
-        /// Cursor position as grapheme-idx.
-        pub fn cursor(&self) -> usize {
-            self.cursor
-        }
+        pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) -> bool {
+            let old_cursor = self.cursor;
 
-        pub fn anchor(&self) -> usize {
-            self.anchor
-        }
+            let c = min(self.len, cursor);
 
-        pub fn has_selection(&self) -> bool {
-            self.cursor != self.anchor
-        }
-
-        pub fn is_select_all(&self) -> bool {
-            let selection = self.selection();
-            selection.start == 0 && selection.end == self.mask.len() - 1
-        }
-
-        pub fn selection(&self) -> Range<usize> {
-            if self.cursor < self.anchor {
-                self.cursor..self.anchor
-            } else {
-                self.anchor..self.cursor
-            }
-        }
-
-        pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) {
-            if cursor > self.len {
-                self.cursor = self.len;
-            } else {
-                self.cursor = cursor;
-            }
+            self.cursor = c;
 
             if !extend_selection {
-                self.anchor = self.cursor;
+                self.anchor = c;
             }
 
             self.fix_offset();
-        }
 
-        fn fix_offset(&mut self) {
-            if self.offset > self.cursor {
-                self.offset = self.cursor;
-            } else if self.offset + self.width < self.cursor {
-                self.offset = self.cursor - self.width;
-            }
+            c != old_cursor
         }
 
         /// Place cursor at decimal separator, if any. 0 otherwise.
@@ -1525,6 +1649,23 @@ pub mod core {
                 self.anchor = 0;
                 self.fix_offset();
             }
+        }
+
+        fn fix_offset(&mut self) {
+            if self.offset > self.cursor {
+                self.offset = self.cursor;
+            } else if self.offset + self.width < self.cursor {
+                self.offset = self.cursor - self.width;
+            }
+        }
+
+        /// Cursor position as grapheme-idx.
+        pub fn cursor(&self) -> usize {
+            self.cursor
+        }
+
+        pub fn anchor(&self) -> usize {
+            self.anchor
         }
 
         /// Set the decimal separator and other symbols.
@@ -1672,6 +1813,12 @@ pub mod core {
             self.value.as_str()
         }
 
+        /// Value as grapheme iterator.
+        #[inline]
+        pub fn value_graphemes(&self) -> Graphemes<'_> {
+            self.value.graphemes(true)
+        }
+
         /// Value split along any separators
         pub fn value_parts(&self) -> Vec<String> {
             let mut res = Vec::new();
@@ -1709,6 +1856,14 @@ pub mod core {
             buf
         }
 
+        /// Reset value but not the mask and width.
+        /// Resets offset and cursor position too.
+        pub fn clear(&mut self) {
+            self.offset = 0;
+            self.set_value(MaskToken::empty_section(&self.mask));
+            self.set_default_cursor();
+        }
+
         /// No value different from the default.
         pub fn is_empty(&self) -> bool {
             for (m, c) in self.mask.iter().zip(self.value.graphemes(true)) {
@@ -1722,6 +1877,23 @@ pub mod core {
         /// Length
         pub fn len(&self) -> usize {
             self.len
+        }
+
+        pub fn has_selection(&self) -> bool {
+            self.cursor != self.anchor
+        }
+
+        pub fn is_select_all(&self) -> bool {
+            let selection = self.selection();
+            selection.start == 0 && selection.end == self.mask.len() - 1
+        }
+
+        pub fn selection(&self) -> Range<usize> {
+            if self.cursor < self.anchor {
+                self.cursor..self.anchor
+            } else {
+                self.anchor..self.cursor
+            }
         }
 
         /// Rendered string for display.
@@ -1979,36 +2151,150 @@ pub mod core {
             self.rendered = rendered;
         }
 
-        /// Next boundary.
-        pub fn next_word_boundary(&self) -> usize {
-            if self.cursor == self.len {
-                self.len
-            } else {
-                // todo: skip to sep
-                self.value
-                    .graphemes(true)
-                    .enumerate()
-                    .skip(self.cursor)
-                    .skip_while(|(_, c)| util::is_alphanumeric(c))
-                    .find(|(_, c)| util::is_alphanumeric(c))
-                    .map(|(i, _)| i)
-                    .unwrap_or_else(|| self.len)
+        /// Convert the byte-position to a grapheme position.
+        pub fn byte_pos(&self, byte_pos: usize) -> Option<usize> {
+            let mut pos = None;
+
+            for (gp, (bp, _cc)) in self
+                .value
+                .grapheme_indices(true)
+                .chain(once((self.len(), "")))
+                .enumerate()
+            {
+                if bp >= byte_pos {
+                    pos = Some(gp);
+                    break;
+                }
             }
+
+            pos
         }
 
-        /// Previous boundary.
-        pub fn prev_word_boundary(&self) -> usize {
-            if self.cursor == 0 {
-                0
-            } else {
-                self.value
-                    .graphemes(true)
-                    .rev()
-                    .skip(self.len - self.cursor)
-                    .skip_while(|c| util::is_alphanumeric(c))
-                    .skip_while(|c| util::is_alphanumeric(c))
-                    .count()
+        /// Grapheme position to byte position.
+        /// Returns the byte-range for the grapheme at pos.
+        pub fn byte_at(&self, pos: usize) -> Option<(usize, usize)> {
+            let mut byte_pos = None;
+
+            for (gp, (bp, cc)) in self
+                .value
+                .grapheme_indices(true)
+                .chain(once((self.value.len(), "")))
+                .enumerate()
+            {
+                if gp == pos {
+                    byte_pos = Some((bp, bp + cc.len()));
+                    break;
+                }
             }
+
+            byte_pos
+        }
+
+        /// Grapheme position to char position.
+        /// Returns the first char position for the grapheme at pos.
+        pub fn char_at(&self, pos: usize) -> Option<usize> {
+            let mut char_pos = 0;
+            for (gp, (_bp, cc)) in self
+                .value
+                .grapheme_indices(true)
+                .chain(once((self.len(), "")))
+                .enumerate()
+            {
+                if gp == pos {
+                    return Some(char_pos);
+                }
+                char_pos += cc.chars().count();
+            }
+
+            None
+        }
+
+        /// Char position to grapheme position.
+        pub fn char_pos(&self, char_pos: usize) -> Option<usize> {
+            let mut cp = 0;
+            for (gp, (_bp, cc)) in self
+                .value
+                .grapheme_indices(true)
+                .chain(once((self.len(), "")))
+                .enumerate()
+            {
+                if cp >= char_pos {
+                    return Some(gp);
+                }
+                cp += cc.chars().count();
+            }
+
+            None
+        }
+
+        /// Find next word.
+        pub fn next_word_boundary(&self, pos: usize) -> Option<usize> {
+            let Some(byte_pos) = self.byte_at(pos) else {
+                return None;
+            };
+
+            let (_, str_after) = self.value.split_at(byte_pos.0);
+            let mut it = str_after.graphemes(true);
+            let mut init = true;
+            let mut gp = 0;
+            loop {
+                let Some(c) = it.next() else {
+                    break;
+                };
+
+                if init {
+                    if let Some(c) = c.chars().next() {
+                        if !c.is_whitespace() {
+                            init = false;
+                        }
+                    }
+                } else {
+                    if let Some(c) = c.chars().next() {
+                        if c.is_whitespace() {
+                            break;
+                        }
+                    }
+                }
+
+                gp += 1;
+            }
+
+            Some(pos + gp)
+        }
+
+        /// Find previous word.
+        pub fn prev_word_boundary(&self, pos: usize) -> Option<usize> {
+            let Some(byte_pos) = self.byte_at(pos) else {
+                return None;
+            };
+
+            let (str_before, _) = self.value.split_at(byte_pos.0);
+            let mut it = str_before.graphemes(true).rev();
+            let mut init = true;
+            let mut gp = gr_len(str_before);
+            loop {
+                let Some(c) = it.next() else {
+                    break;
+                };
+
+                if init {
+                    if let Some(c) = c.chars().next() {
+                        if !c.is_whitespace() {
+                            init = false;
+                        }
+                    }
+                } else {
+                    if let Some(c) = c.chars().next() {
+                        if c.is_whitespace() {
+                            break;
+                        }
+                    }
+                }
+
+                gp -= 1;
+            }
+
+            Some(gp)
         }
 
         /// Start at the cursor position and find a valid insert position for the input c.
@@ -2290,7 +2576,7 @@ pub mod core {
                 buf.push(self.map_input_c(&mask.right, c));
                 buf.push_str(util::drop_first(c1));
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
 
                 self.cursor += 1;
@@ -2305,7 +2591,7 @@ pub mod core {
                 buf.push(self.map_input_c(&mask.right, c));
                 buf.push_str(util::drop_last(c1));
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
 
                 self.cursor += 1;
@@ -2340,7 +2626,7 @@ pub mod core {
                 buf.push_str(b);
                 buf.push_str(mmstr.as_str());
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
                 // cursor stays
 
@@ -2384,7 +2670,7 @@ pub mod core {
                     buf.push_str(b);
                     buf.push_str(repl);
                     buf.push_str(a);
-                    debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                    debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                     self.value = buf;
                     // note: probably no remap necessary?
                     return true;
@@ -2413,7 +2699,7 @@ pub mod core {
                     buf.push_str(b);
                     buf.push_str(repl);
                     buf.push_str(a);
-                    debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                    debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                     self.value = buf;
                     // note: probably no remap necessary?
                     return true;
@@ -2428,7 +2714,7 @@ pub mod core {
                 buf.push(' ');
                 buf.push_str(c1);
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
                 // note: probably no remap necessary?
                 return true;
@@ -2459,7 +2745,7 @@ pub mod core {
                             buf.push_str(b);
                             buf.push_str(mmstr.as_str());
                             buf.push_str(a);
-                            debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                            debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                             self.value = buf;
                         };
 
@@ -2525,7 +2811,7 @@ pub mod core {
 
                 mask = &self.mask[mask.sec_end];
             }
-            debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+            debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
             self.value = buf;
 
             self.cursor = selection.start;
@@ -2570,7 +2856,7 @@ pub mod core {
                 buf.push_str(b);
                 buf.push_str(&mmstr);
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
             } else if left.right.is_ltor() {
                 let mut buf = String::new();
@@ -2584,7 +2870,7 @@ pub mod core {
                 buf.push_str(MaskToken::empty_section(fill_mask).as_str());
 
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
             }
 
@@ -2645,7 +2931,7 @@ pub mod core {
                 buf.push_str(b);
                 buf.push_str(&mmstr);
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
             } else if right.right.is_ltor() {
                 let mut buf = String::new();
@@ -2659,7 +2945,7 @@ pub mod core {
                 buf.push_str(MaskToken::empty_section(fill_mask).as_str());
 
                 buf.push_str(a);
-                debug_assert_eq!(util::gr_len(&buf), util::gr_len(&self.value));
+                debug_assert_eq!(gr_len(&buf), gr_len(&self.value));
                 self.value = buf;
             }
 
