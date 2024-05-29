@@ -19,7 +19,7 @@ use std::cmp::min;
 use std::fmt::Debug;
 
 /// Menu
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct MenuLine<'a> {
     style: Style,
     title_style: Option<Style>,
@@ -57,21 +57,6 @@ pub struct MenuLineState {
     pub mouse: MouseFlags,
 
     pub non_exhaustive: NonExhaustive,
-}
-
-impl<'a> Default for MenuLine<'a> {
-    fn default() -> Self {
-        Self {
-            style: Default::default(),
-            title_style: Default::default(),
-            select_style: Default::default(),
-            focus_style: Default::default(),
-            title: Default::default(),
-            key: vec![],
-            menu: vec![],
-            focused: false,
-        }
-    }
 }
 
 impl<'a> MenuLine<'a> {
@@ -134,6 +119,7 @@ impl<'a> MenuLine<'a> {
 
     /// Add item.
     #[inline]
+    #[allow(clippy::should_implement_trait)]
     pub fn add(mut self, menu_item: &'a str) -> Self {
         let (key, item) = menu_span(menu_item);
         self.key.push(key);

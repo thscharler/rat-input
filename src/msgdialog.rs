@@ -102,14 +102,13 @@ impl MsgDialogState {
 
 impl Default for MsgDialogState {
     fn default() -> Self {
-        let s = Self {
+        Self {
             active: false,
             area: Default::default(),
             message: Default::default(),
             button: Default::default(),
             non_exhaustive: NonExhaustive,
-        };
-        s
+        }
     }
 }
 
@@ -168,7 +167,7 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MsgDialogState
                 }
                 v => v.into(),
             };
-            let r = if r == Outcome::NotUsed {
+            if r == Outcome::NotUsed {
                 match event {
                     ct_event!(keycode press Esc) => {
                         self.clear();
@@ -179,8 +178,7 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MsgDialogState
                 }
             } else {
                 r
-            };
-            r
+            }
         } else {
             Outcome::NotUsed
         }

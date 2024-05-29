@@ -1,9 +1,9 @@
 //!
-//! A widget for date-input using [crate::chrono]
+//! A widget for date-input using [chrono](https://docs.rs/chrono/latest/chrono/)
 //!
 
 use crate::_private::NonExhaustive;
-use crate::event::TextOutcome;
+use crate::event::{ReadOnly, TextOutcome};
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
 use chrono::format::{Fixed, Item, Numeric, Pad, StrftimeItems};
 use chrono::{Datelike, Days, Local, Months, NaiveDate};
@@ -150,7 +150,7 @@ impl DateInputState {
 
     /// Reset to empty.
     #[inline]
-    pub fn reset(&mut self) {
+    pub fn clear(&mut self) {
         self.widget.clear();
     }
 
@@ -472,6 +472,12 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for DateInputS
     }
 }
 
+impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for DateInputState {
+    fn handle(&mut self, event: &crossterm::event::Event, _keymap: ReadOnly) -> TextOutcome {
+        self.widget.handle(event, ReadOnly)
+    }
+}
+
 impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for DateInputState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
         self.widget.handle(event, MouseOnly)
@@ -490,6 +496,21 @@ pub fn handle_events(
         HandleEvent::handle(state, event, FocusKeys)
     } else {
         HandleEvent::handle(state, event, MouseOnly)
+    }
+}
+
+/// Handle only navigation events.
+/// Text events are only processed if focus is true.
+/// Mouse events are processed if they are in range.
+pub fn handle_readonly_events(
+    state: &mut DateInputState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> TextOutcome {
+    if focus {
+        state.handle(event, ReadOnly)
+    } else {
+        state.handle(event, MouseOnly)
     }
 }
 

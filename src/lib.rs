@@ -1,4 +1,7 @@
 #![doc = include_str!("../readme.md")]
+#![allow(clippy::collapsible_else_if)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::if_same_then_else)]
 
 pub mod button;
 pub mod calendar;
@@ -16,6 +19,10 @@ pub mod util;
 pub use pure_rust_locales::Locale;
 
 pub mod event {
+    //!
+    //! Event-handler traits and Keybindings.
+    //!
+
     pub use rat_event::util::Outcome;
     pub use rat_event::{FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 

@@ -7,6 +7,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+#[allow(unused_imports)]
 use log::debug;
 use rat_event::ct_event;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome, TextOutcome};
@@ -341,9 +342,9 @@ fn handle_input(
 
 pub(crate) fn insert_text_3(state: &mut State) {
     #[cfg(debug_assertions)]
-    let mut l = lorem_rustum::LoremRustum::new(1_000_000);
+    let l = lorem_rustum::LoremRustum::new(1_000_000);
     #[cfg(not(debug_assertions))]
-    let mut l = lorem_rustum::LoremRustum::new(100_000_000);
+    let l = lorem_rustum::LoremRustum::new(10_000_000);
 
     let mut style = Vec::new();
 
@@ -359,10 +360,10 @@ pub(crate) fn insert_text_3(state: &mut State) {
             style.push((pos, pos + p.len(), 0));
         } else if p == "assert!" {
             style.push((pos, pos + p.len(), 1));
-            // } else if p == "<'a>" {
-            //     style.push((pos, pos + p.len(), 2));
-            // } else if p == "await" {
-            //     style.push((pos, pos + p.len(), 3));
+        } else if p == "<'a>" {
+            style.push((pos, pos + p.len(), 2));
+        } else if p == "await" {
+            style.push((pos, pos + p.len(), 3));
         }
 
         pos += p.len() + 1;
@@ -390,9 +391,9 @@ pub(crate) fn insert_text_2(state: &mut State) {
 
 pub(crate) fn insert_text_1(state: &mut State) {
     let str = "short text\n🤷‍♂️\n🤷‍♀️\n🤦‍♂️\n❤️\n🤦‍♀️\n💕\n🙍🏿‍♀️\n";
-    for c in str.chars() {
-        debug!("text1: {:?} {:x}", c, c as u32);
-    }
+    // for c in str.chars() {
+    //     debug!("text1: {:?} {:x}", c, c as u32);
+    // }
 
     state.textarea.set_value(str);
 }

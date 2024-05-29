@@ -264,8 +264,8 @@ impl TextAreaState {
 
     /// Clear everything.
     #[inline]
-    pub fn clear(&mut self) {
-        self.value.clear();
+    pub fn clear(&mut self) -> bool {
+        self.value.clear()
     }
 
     /// Current offset for scrolling.
@@ -320,8 +320,8 @@ impl TextAreaState {
 
     /// Text as Bytes iterator.
     #[inline]
-    pub fn value_as_chars(&self) -> ropey::iter::Bytes<'_> {
-        self.value.value_as_bytes()
+    pub fn value_as_chars(&self) -> ropey::iter::Chars<'_> {
+        self.value.value_as_chars()
     }
 
     /// Set the text value.
@@ -335,7 +335,7 @@ impl TextAreaState {
     /// Resets all internal state.
     #[inline]
     pub fn set_value_rope(&mut self, s: Rope) {
-        self.value.set_rope(s);
+        self.value.set_value_rope(s);
     }
 
     /// Empty.
@@ -387,10 +387,29 @@ impl TextAreaState {
         self.value.select_all()
     }
 
+    /// Selection.
+    #[inline]
+    pub fn selected_value(&self) -> Option<RopeSlice<'_>> {
+        self.value.value_range(self.value.selection())
+    }
+
     /// Clear all set styles.
     #[inline]
     pub fn clear_styles(&mut self) {
         self.value.clear_styles();
+    }
+
+    /// Add a style for a [TextRange]. The style-nr refers to one
+    /// of the styles set with the widget.
+    #[inline]
+    pub fn add_style(&mut self, range: TextRange, style: usize) {
+        self.value.add_style(range, style);
+    }
+
+    /// All styles active at the given position.
+    #[inline]
+    pub fn styles_at(&self, pos: (usize, usize), result: &mut Vec<usize>) {
+        self.value.styles_at(pos, result)
     }
 
     /// Convert a byte position to a text area position.
@@ -420,19 +439,6 @@ impl TextAreaState {
     #[inline]
     pub fn char_at(&self, pos: (usize, usize)) -> Option<usize> {
         self.value.char_at(pos)
-    }
-
-    /// Add a style for a [TextRange]. The style-nr refers to one
-    /// of the styles set with the widget.
-    #[inline]
-    pub fn add_style(&mut self, range: TextRange, style: usize) {
-        self.value.add_style(range, style);
-    }
-
-    /// All styles active at the given position.
-    #[inline]
-    pub fn styles_at(&self, pos: (usize, usize), result: &mut Vec<usize>) {
-        self.value.styles_at(pos, result)
     }
 
     /// Insert a character at the cursor position.
@@ -769,9 +775,7 @@ impl TextAreaState {
         let (mut cx, cy) = (0usize, row);
         let (ox, _oy) = self.value.offset();
 
-        let Some(line) = self.line(cy) else {
-            return None;
-        };
+        let line = self.line(cy)?;
         let mut test = 0;
         for c in line.skip(ox).filter(|v| v != "\n") {
             if test >= x {
@@ -797,9 +801,7 @@ impl TextAreaState {
         let (ox, _oy) = self.value.offset();
 
         let mut sx = 0;
-        let Some(line) = self.line(py) else {
-            return None;
-        };
+        let line = self.line(py)?;
         for c in line.skip(ox).filter(|v| v != "\n").take(px - ox) {
             sx += if let Some(c) = c.as_str() {
                 unicode_display_width::width(c) as usize
@@ -1129,7 +1131,7 @@ impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for TextAreaSta
 
 impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
-        let r = match event {
+        match event {
             ct_event!(scroll down for column,row) => {
                 if self.area.contains(Position::new(*column, *row)) {
                     self.scroll_down(self.vertical_scroll()).into()
@@ -1182,9 +1184,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
                 TextOutcome::NotUsed
             }
             _ => TextOutcome::NotUsed,
-        };
-
-        r
+        }
     }
 }
 
@@ -1483,6 +1483,7 @@ pub mod core {
 
         /// What place is the range respective to the given position.
         #[inline(always)]
+        #[allow(clippy::comparison_chain)]
         pub fn ordering(&self, pos: (usize, usize)) -> Ordering {
             if pos.1 < self.start.1 {
                 return Ordering::Greater;
@@ -1518,6 +1519,7 @@ pub mod core {
         /// What place is the range respective to the given position.
         /// This one includes the `range.end`.
         #[inline(always)]
+        #[allow(clippy::comparison_chain)]
         pub fn ordering_inclusive(&self, pos: (usize, usize)) -> Ordering {
             if pos.1 < self.start.1 {
                 return Ordering::Greater;
@@ -1586,6 +1588,7 @@ pub mod core {
         }
 
         #[inline(always)]
+        #[allow(clippy::comparison_chain)]
         fn _expand(&self, pos: &mut (usize, usize)) {
             let delta_lines = self.end.1 - self.start.1;
 
@@ -1614,6 +1617,7 @@ pub mod core {
 
         /// Return the modified position, if this range would shrink to nothing.
         #[inline(always)]
+        #[allow(clippy::comparison_chain)]
         fn _shrink(&self, pos: &mut (usize, usize)) {
             let delta_lines = self.end.1 - self.start.1;
             match self.ordering_inclusive(*pos) {
@@ -1641,6 +1645,8 @@ pub mod core {
     // For any sane range I'd need (row,col) but what I got is (col,row).
     // Need this to conform with the rest of ratatui ...
     impl PartialOrd for TextRange {
+        #[allow(clippy::comparison_chain)]
+        #[allow(clippy::non_canonical_partial_ord_impl)]
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
             // reverse the args, then it works.
             let start = (self.start.1, self.start.0);
@@ -1754,10 +1760,7 @@ pub mod core {
         type Item = Skip<RopeGraphemes<'a>>;
 
         fn next(&mut self) -> Option<Self::Item> {
-            let Some(s) = self.lines.next() else {
-                return None;
-            };
-
+            let s = self.lines.next()?;
             Some(RopeGraphemes::new(s).skip(self.offset))
         }
     }
@@ -1850,7 +1853,7 @@ pub mod core {
         /// Set the text value as a Rope.
         /// Resets all internal state.
         #[inline]
-        pub fn set_rope(&mut self, s: Rope) {
+        pub fn set_value_rope(&mut self, s: Rope) {
             self.value = s;
             self.offset = (0, 0);
             self.cursor = (0, 0);
@@ -1867,13 +1870,8 @@ pub mod core {
 
         /// A range of the text as RopeSlice.
         pub fn value_range(&self, range: TextRange) -> Option<RopeSlice<'_>> {
-            let Some(s) = self.char_at(range.start) else {
-                return None;
-            };
-            let Some(e) = self.char_at(range.end) else {
-                return None;
-            };
-
+            let s = self.char_at(range.start)?;
+            let e = self.char_at(range.end)?;
             Some(self.value.slice(s..e))
         }
 
@@ -1919,9 +1917,7 @@ pub mod core {
         /// Returns a line as an iterator over the graphemes for the line.
         /// This contains the \n at the end.
         pub fn line(&self, n: usize) -> Option<RopeGraphemes<'_>> {
-            let Some(mut lines) = self.value.get_lines_at(n) else {
-                return None;
-            };
+            let mut lines = self.value.get_lines_at(n)?;
             let line = lines.next();
             if let Some(line) = line {
                 Some(RopeGraphemes::new(line))
@@ -1933,9 +1929,7 @@ pub mod core {
         /// Returns a line as an iterator over the graphemes for the line.
         /// This contains the \n at the end.
         pub fn line_idx(&self, n: usize) -> Option<RopeGraphemesIdx<'_>> {
-            let Some(mut lines) = self.value.get_lines_at(n) else {
-                return None;
-            };
+            let mut lines = self.value.get_lines_at(n)?;
             let line = lines.next();
             if let Some(line) = line {
                 Some(RopeGraphemesIdx::new(line))
@@ -1946,9 +1940,7 @@ pub mod core {
 
         /// Line width as grapheme count.
         pub fn line_width(&self, n: usize) -> Option<usize> {
-            let Some(mut lines) = self.value.get_lines_at(n) else {
-                return None;
-            };
+            let mut lines = self.value.get_lines_at(n)?;
             let line = lines.next();
             if let Some(line) = line {
                 Some(rope_len(line))
@@ -1965,8 +1957,13 @@ pub mod core {
 
         /// Reset.
         #[inline]
-        pub fn clear(&mut self) {
-            self.set_value("");
+        pub fn clear(&mut self) -> bool {
+            if self.is_empty() {
+                false
+            } else {
+                self.set_value("");
+                true
+            }
         }
 
         /// Empty.
@@ -2005,7 +2002,8 @@ pub mod core {
 
         /// Returns the selection as TextRange.
         pub fn selection(&self) -> TextRange {
-            let selection = if self.cursor.1 < self.anchor.1 {
+            #[allow(clippy::comparison_chain)]
+            if self.cursor.1 < self.anchor.1 {
                 TextRange {
                     start: self.cursor,
                     end: self.anchor,
@@ -2027,9 +2025,7 @@ pub mod core {
                         end: self.cursor,
                     }
                 }
-            };
-
-            selection
+            }
         }
 
         /// Iterate over the text, shifted by the offset.
@@ -2046,9 +2042,7 @@ pub mod core {
 
         /// Find next word.
         pub fn next_word_boundary(&self, pos: (usize, usize)) -> Option<(usize, usize)> {
-            let Some(mut char_pos) = self.char_at(pos) else {
-                return None;
-            };
+            let mut char_pos = self.char_at(pos)?;
 
             let chars_after = self.value.slice(char_pos..);
             let mut it = chars_after.chars_at(0);
@@ -2076,9 +2070,7 @@ pub mod core {
 
         /// Find prev word.
         pub fn prev_word_boundary(&self, pos: (usize, usize)) -> Option<(usize, usize)> {
-            let Some(mut char_pos) = self.char_at(pos) else {
-                return None;
-            };
+            let mut char_pos = self.char_at(pos)?;
 
             let chars_before = self.value.slice(..char_pos);
             let mut it = chars_before.chars_at(chars_before.len_chars());
@@ -2179,9 +2171,7 @@ pub mod core {
 
         /// Returns the first char position for the grapheme position.
         pub fn char_at(&self, pos: (usize, usize)) -> Option<usize> {
-            let Some((byte_pos, _)) = self.byte_at(pos) else {
-                return None;
-            };
+            let (byte_pos, _) = self.byte_at(pos)?;
             Some(
                 self.value
                     .try_byte_to_char(byte_pos)
@@ -2197,7 +2187,7 @@ pub mod core {
             }
 
             let Some(char_pos) = self.char_at(pos) else {
-                return;
+                panic!("invalid pos {:?} value {:?}", pos, self.value);
             };
 
             // no way to know if the new char combines with a surrounding char.

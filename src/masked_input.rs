@@ -90,7 +90,7 @@ use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Text input widget with input mask.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct MaskedInput<'a> {
     show_compact: bool,
     block: Option<Block<'a>>,
@@ -135,21 +135,6 @@ impl Default for MaskedInputStyle {
             select: Default::default(),
             invalid: Default::default(),
             non_exhaustive: NonExhaustive,
-        }
-    }
-}
-
-impl<'a> Default for MaskedInput<'a> {
-    fn default() -> Self {
-        Self {
-            show_compact: false,
-            block: None,
-            style: Default::default(),
-            focus_style: Default::default(),
-            select_style: Default::default(),
-            invalid_style: Default::default(),
-            focused: false,
-            invalid: false,
         }
     }
 }
@@ -511,7 +496,7 @@ impl MaskedInputState {
         self.value.compact_value()
     }
 
-    ///
+    /// Empty
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.value.is_empty()
@@ -861,7 +846,7 @@ impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for MaskedInput
 
 impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for MaskedInputState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
-        let r = match event {
+        match event {
             ct_event!(mouse down Left for column,row) => {
                 if self.inner.contains(Position::new(*column, *row)) {
                     self.mouse.set_drag();
@@ -884,9 +869,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for MaskedInpu
                 TextOutcome::NotUsed
             }
             _ => TextOutcome::NotUsed,
-        };
-
-        r
+        }
     }
 }
 
@@ -2229,9 +2212,7 @@ pub mod core {
 
         /// Find next word.
         pub fn next_word_boundary(&self, pos: usize) -> Option<usize> {
-            let Some(byte_pos) = self.byte_at(pos) else {
-                return None;
-            };
+            let byte_pos = self.byte_at(pos)?;
 
             let (_, str_after) = self.value.split_at(byte_pos.0);
             let mut it = str_after.graphemes(true);
@@ -2264,9 +2245,7 @@ pub mod core {
 
         /// Find previous word.
         pub fn prev_word_boundary(&self, pos: usize) -> Option<usize> {
-            let Some(byte_pos) = self.byte_at(pos) else {
-                return None;
-            };
+            let byte_pos = self.byte_at(pos)?;
 
             let (str_before, _) = self.value.split_at(byte_pos.0);
             let mut it = str_before.graphemes(true).rev();
@@ -2553,6 +2532,7 @@ pub mod core {
                 let mask = &self.mask[self.cursor];
                 if mask.right.is_ltor() {
                     if self.insert_ltor(c) {
+                        #[allow(clippy::needless_return)]
                         return;
                     }
                 }

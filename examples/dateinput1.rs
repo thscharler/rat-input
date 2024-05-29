@@ -12,7 +12,7 @@ use rat_event::{FocusKeys, HandleEvent};
 use rat_input::date_input::{DateInput, DateInputState};
 use rat_input::event::Outcome;
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
 use ratatui::text::Span;
 use ratatui::{Frame, Terminal};
@@ -171,7 +171,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         .focused(true)
         .style(Style::default().black().on_green());
     frame.render_stateful_widget(input1, l1[1], &mut state.input);
-    if let Some(Position { x, y }) = state.input.screen_cursor() {
+    if let Some((x, y)) = state.input.screen_cursor() {
         frame.set_cursor(x, y);
     }
 
@@ -181,5 +181,5 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
 
 fn handle_input(event: &crossterm::event::Event, _data: &mut Data, state: &mut State) -> Outcome {
     let r = state.input.handle(event, FocusKeys);
-    r
+    r.into()
 }

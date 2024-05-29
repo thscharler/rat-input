@@ -32,6 +32,7 @@ pub struct ButtonStyle {
     pub non_exhaustive: NonExhaustive,
 }
 
+/// State data & event-handling.
 #[derive(Debug, Clone)]
 pub struct ButtonState {
     /// Complete area

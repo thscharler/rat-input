@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use log::debug;
 use ratatui::text::Span;
 use std::cmp::min;
@@ -39,7 +40,7 @@ pub(crate) fn next(select: usize, change: usize, max: usize) -> usize {
     min(select + change, max)
 }
 
-///
+/// Length in graphemes.
 pub(crate) fn gr_len(s: &str) -> usize {
     s.graphemes(true).count()
 }
@@ -250,13 +251,6 @@ pub(crate) fn split3(value: &str, selection: Range<usize>) -> (&str, &str, &str)
         if cidx == selection.end {
             byte_selection_end = Some(idx)
         }
-    }
-
-    if byte_selection_start.is_none() || byte_selection_end.is_none() {
-        debug!(
-            "split3 {:?} {:?} || {:?} {:?}",
-            value, selection, byte_selection_start, byte_selection_end
-        );
     }
 
     let byte_selection_start = byte_selection_start.expect("byte_selection_start_not_found");

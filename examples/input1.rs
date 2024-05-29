@@ -177,8 +177,8 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         frame.set_cursor(x, y);
     }
 
-    let rule = Span::from("0123456789_123456789_123456789_123456789_1234");
-    frame.render_widget(rule, l1[2]);
+    // let rule = Span::from("0123456789_123456789_123456789_123456789_1234");
+    // frame.render_widget(rule, l1[2]);
 }
 
 fn handle_input(

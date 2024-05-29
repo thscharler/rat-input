@@ -1,6 +1,6 @@
 [package]
 name = "rat-input"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2021"
 description = "ratatui text input widgets"
 license = "MIT/Apache-2.0"
@@ -45,7 +45,7 @@ variant_size_differences = "warn"
 [dependencies]
 chrono = { version = "0.4", features = ["unstable-locales"] }
 crossterm = "0.27"
-ratatui = { version = "0.26", features = ["unstable-widget-ref", "unstable-rendered-line-info"] }
+ratatui = { version = "0.26", features = ["unstable-rendered-line-info"] }
 unicode-segmentation = "1.11"
 unicode-width = "0.1.12"
 unicode-display-width = "0.3.0"

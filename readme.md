@@ -12,7 +12,7 @@ Eventhandling is currently crossterm only.
 In practice event-handling is calling 1 or 2 functions on the state, so this
 should be easy to map to other systems. (Contributions welcome :)
 
-# [TextArea](crate::textarea::TextArea)
+# [TextArea](crate::textarea)
 
 Editable text area.
 
@@ -21,14 +21,16 @@ Editable text area.
 * Possible states as style: Focused
 * Emoji supported.
 
-# [TextInput](crate::input::TextInput)
+![image](https://github.com/thscharler/rat-input/blob/master/textarea.gif?raw=true)
+
+# [TextInput](crate::input)
 
 Basic text input field.
 
 * Text selection with keyboard + mouse
 * Possible states as styles: Focused, Invalid
 
-#[MaskedInput](crate::masked_input::MaskedInput)
+# [MaskedInput](crate::masked_input)
 
 Text input with an input mask.
 
@@ -42,22 +44,22 @@ Text input with an input mask.
 * info-overlay for sub-fields without value
 * Localization with [rat-input::NumberSymbols] based on [pure-rust-locales](pure-rust-locales)
 
-#[Button](crate::button::Button)
+# [Button](crate::button::Button)
 
 Simple button widget.
 
-#[DateInput](crate::date_input::)
+# [DateInput](crate::date_input)
 
 Date input with format strings parsed by [chrono](chrono).
 
-#[Month](crate::calender::)
+# [Month](crate::calendar)
 
 Widget for calender display.
 
-#[MenuLine](crate::menuline::)
+# [MenuLine](crate::menuline)
 
 Basic menu widget. Although no submenus as popup.
 
-#[StatusLine](crate::statusline::)
+# [StatusLine](crate::statusline)
 
 Statusline with multiple segments.

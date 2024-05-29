@@ -8,7 +8,7 @@
 //!
 //!
 //! The visual cursor must be set separately after rendering.
-//! It is accessible as [TextInputState::screen_cursor()] or [TextInputState::cursor] after rendering.
+//! It is accessible as [TextInputState::screen_cursor()] after rendering.
 //!
 //! Event handling by calling the freestanding fn [crate::masked_input::handle_events].
 //! There's [handle_mouse_events] if you want to override the default key bindings but keep
@@ -51,7 +51,7 @@ pub struct TextInputStyle {
     pub non_exhaustive: NonExhaustive,
 }
 
-/// Input state data.
+/// Textinput data & event-handling.
 #[derive(Debug, Clone)]
 pub struct TextInputState {
     /// The whole area with block.
@@ -942,9 +942,7 @@ pub mod core {
 
         /// Find next word.
         pub fn next_word_boundary(&self, pos: usize) -> Option<usize> {
-            let Some(byte_pos) = self.byte_at(pos) else {
-                return None;
-            };
+            let byte_pos = self.byte_at(pos)?;
 
             let (_, str_after) = self.value.split_at(byte_pos.0);
             let mut it = str_after.graphemes(true);
@@ -977,9 +975,7 @@ pub mod core {
 
         /// Find previous word.
         pub fn prev_word_boundary(&self, pos: usize) -> Option<usize> {
-            let Some(byte_pos) = self.byte_at(pos) else {
-                return None;
-            };
+            let byte_pos = self.byte_at(pos)?;
 
             let (str_before, _) = self.value.split_at(byte_pos.0);
             let mut it = str_before.graphemes(true).rev();
@@ -1012,7 +1008,6 @@ pub mod core {
 
         /// Insert a char, replacing the selection.
         pub fn insert_char(&mut self, new: char) -> bool {
-            debug!("insert_char {:?} {:?}", self, new);
             let selection = self.selection();
 
             let mut char_buf = mem::take(&mut self.char_buf);
