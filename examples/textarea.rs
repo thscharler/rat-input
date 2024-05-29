@@ -375,7 +375,7 @@ pub(crate) fn insert_text_3(state: &mut State) {
     }
     let buf = buf.finish();
 
-    state.textarea.set_rope(buf);
+    state.textarea.set_value_rope(buf);
 
     for (b, e, s) in style {
         let bb = state.textarea.byte_pos(b).expect("pos");

@@ -2,9 +2,9 @@
 //! A text-area with text-styling abilities.
 //!
 use crate::_private::NonExhaustive;
+use crate::input::TextInputStyle;
 use crate::textarea::core::{RopeGraphemes, TextRange};
 use crate::util::MouseFlags;
-use log::debug;
 use rat_event::util::Outcome;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
 use ratatui::buffer::Buffer;
@@ -60,6 +60,15 @@ pub struct TextArea<'a> {
     focused: bool,
 }
 
+/// Combined style for the widget.
+#[derive(Debug, Clone)]
+pub struct TextAreaStyle {
+    pub style: Style,
+    pub focus: Option<Style>,
+    pub select: Option<Style>,
+    pub non_exhaustive: NonExhaustive,
+}
+
 /// State for the text-area.
 ///
 #[derive(Debug, Clone)]
@@ -82,21 +91,30 @@ impl<'a> TextArea<'a> {
         Self::default()
     }
 
+    /// Set the combined style.
+    #[inline]
+    pub fn styles(mut self, style: TextAreaStyle) -> Self {
+        self.style = style.style;
+        self.focus_style = style.focus;
+        self.select_style = style.select;
+        self
+    }
+
     /// Base style.
     pub fn style(mut self, style: Style) -> Self {
         self.style = style;
         self
     }
 
-    /// Style for selection.
-    pub fn select_style(mut self, style: Style) -> Self {
-        self.select_style = Some(style);
+    /// Style when focused.
+    pub fn focus_style(mut self, style: Style) -> Self {
+        self.focus_style = Some(style);
         self
     }
 
-    /// Selection style when focused.
-    pub fn focus_style(mut self, style: Style) -> Self {
-        self.focus_style = Some(style);
+    /// Selection style.
+    pub fn select_style(mut self, style: Style) -> Self {
+        self.select_style = Some(style);
         self
     }
 
@@ -106,6 +124,19 @@ impl<'a> TextArea<'a> {
     /// one of these styles.
     pub fn text_style<T: IntoIterator<Item = Style>>(mut self, styles: T) -> Self {
         self.text_style = styles.into_iter().collect();
+        self
+    }
+
+    #[inline]
+    pub fn block(mut self, block: Block<'a>) -> Self {
+        self.block = Some(block);
+        self
+    }
+
+    /// Renders the selection differently if focused.
+    #[inline]
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 }
@@ -121,27 +152,23 @@ impl<'a> StatefulWidget for TextArea<'a> {
 
         let area = state.area.intersection(buf.area);
 
-        buf.set_style(area, self.style);
-
         let focus_style = if let Some(focus_style) = self.focus_style {
             focus_style
         } else {
-            Style::default()
+            self.style
+        };
+        let select_style = if let Some(select_style) = self.select_style {
+            select_style
+        } else {
+            self.style.reversed()
+        };
+        let style = if self.focused {
+            focus_style
+        } else {
+            self.style
         };
 
-        let select_style = if self.focused {
-            if let Some(select_style) = self.select_style {
-                select_style.patch(focus_style)
-            } else {
-                self.style.reversed().patch(focus_style)
-            }
-        } else {
-            if let Some(select_style) = self.select_style {
-                select_style
-            } else {
-                self.style.reversed()
-            }
-        };
+        buf.set_style(area, style);
 
         let selection = state.selection();
         let mut styles = Vec::new();
@@ -178,8 +205,7 @@ impl<'a> StatefulWidget for TextArea<'a> {
                     let tx = cx as usize + ox;
                     let ty = row as usize + oy;
 
-                    let mut style = Style::default();
-
+                    let mut style = style;
                     // text-styles
                     state.styles_at((tx, ty), &mut styles);
                     for idx in styles.iter().copied() {
@@ -188,7 +214,6 @@ impl<'a> StatefulWidget for TextArea<'a> {
                         };
                         style = style.patch(*s);
                     }
-
                     // selection
                     if selection.contains((tx, ty)) {
                         style = style.patch(select_style);
@@ -238,16 +263,28 @@ impl TextAreaState {
         Self::default()
     }
 
-    /// Set the offset for scrolling.
+    /// Clear everything.
     #[inline]
-    pub fn set_offset(&mut self, offset: (usize, usize)) -> bool {
-        self.value.set_offset(offset)
+    pub fn clear(&mut self) {
+        self.value.clear();
     }
 
     /// Current offset for scrolling.
     #[inline]
     pub fn offset(&self) -> (usize, usize) {
         self.value.offset()
+    }
+
+    /// Set the offset for scrolling.
+    #[inline]
+    pub fn set_offset(&mut self, offset: (usize, usize)) -> bool {
+        self.value.set_offset(offset)
+    }
+
+    /// Cursor position.
+    #[inline]
+    pub fn cursor(&self) -> (usize, usize) {
+        self.value.cursor()
     }
 
     /// Set the cursor position.
@@ -258,30 +295,10 @@ impl TextAreaState {
         self.value.set_cursor(cursor, extend_selection)
     }
 
-    /// Cursor position.
-    #[inline]
-    pub fn cursor(&self) -> (usize, usize) {
-        self.value.cursor()
-    }
-
     /// Selection anchor.
     #[inline]
     pub fn anchor(&self) -> (usize, usize) {
         self.value.anchor()
-    }
-
-    /// Set the text value.
-    /// Resets all internal state.
-    #[inline]
-    pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
-        self.value.set_value(s);
-    }
-
-    /// Set the text value as a Rope.
-    /// Resets all internal state.
-    #[inline]
-    pub fn set_rope(&mut self, s: Rope) {
-        self.value.set_rope(s);
     }
 
     /// Text value
@@ -308,46 +325,24 @@ impl TextAreaState {
         self.value.value_as_bytes()
     }
 
-    /// Convert a byte position to a text area position.
-    /// Uses grapheme based column indexes.
+    /// Set the text value.
+    /// Resets all internal state.
     #[inline]
-    pub fn byte_pos(&self, byte: usize) -> Option<(usize, usize)> {
-        self.value.byte_pos(byte)
+    pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
+        self.value.set_value(s);
     }
 
-    /// Convert a text area position to a byte range.
-    /// Uses grapheme based column indexes.
-    /// Returns (byte-start, byte-end) of the grapheme at the given position.
+    /// Set the text value as a Rope.
+    /// Resets all internal state.
     #[inline]
-    pub fn byte_at(&self, pos: (usize, usize)) -> Option<(usize, usize)> {
-        self.value.byte_at(pos)
+    pub fn set_value_rope(&mut self, s: Rope) {
+        self.value.set_rope(s);
     }
 
-    /// Convert a char position to a text area position.
-    /// Uses grapheme based column indexes.
+    /// Empty.
     #[inline]
-    pub fn char_pos(&self, byte: usize) -> Option<(usize, usize)> {
-        self.value.char_pos(byte)
-    }
-
-    /// Convert a text area position to a char position.
-    /// Uses grapheme based column indexes.
-    #[inline]
-    pub fn char_at(&self, pos: (usize, usize)) -> Option<usize> {
-        self.value.char_at(pos)
-    }
-
-    /// Grapheme iterator for a given line.
-    /// This contains the \n at the end.
-    #[inline]
-    pub fn line(&self, n: usize) -> Option<RopeGraphemes<'_>> {
-        self.value.line(n)
-    }
-
-    /// Line width as grapheme count.
-    #[inline]
-    pub fn line_width(&self, n: usize) -> Option<usize> {
-        self.value.line_width(n)
+    pub fn is_empty(&self) -> bool {
+        self.value.is_empty()
     }
 
     /// Line count.
@@ -356,16 +351,17 @@ impl TextAreaState {
         self.value.len_lines()
     }
 
-    /// Clear everything.
+    /// Line width as grapheme count.
     #[inline]
-    pub fn clear(&mut self) {
-        self.value.clear();
+    pub fn line_width(&self, n: usize) -> Option<usize> {
+        self.value.line_width(n)
     }
 
-    /// Empty.
+    /// Grapheme iterator for a given line.
+    /// This contains the \n at the end.
     #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.value.is_empty()
+    pub fn line(&self, n: usize) -> Option<RopeGraphemes<'_>> {
+        self.value.line(n)
     }
 
     /// Has a selection?
@@ -396,6 +392,35 @@ impl TextAreaState {
     #[inline]
     pub fn clear_styles(&mut self) {
         self.value.clear_styles();
+    }
+
+    /// Convert a byte position to a text area position.
+    /// Uses grapheme based column indexes.
+    #[inline]
+    pub fn byte_pos(&self, byte: usize) -> Option<(usize, usize)> {
+        self.value.byte_pos(byte)
+    }
+
+    /// Convert a text area position to a byte range.
+    /// Uses grapheme based column indexes.
+    /// Returns (byte-start, byte-end) of the grapheme at the given position.
+    #[inline]
+    pub fn byte_at(&self, pos: (usize, usize)) -> Option<(usize, usize)> {
+        self.value.byte_at(pos)
+    }
+
+    /// Convert a char position to a text area position.
+    /// Uses grapheme based column indexes.
+    #[inline]
+    pub fn char_pos(&self, byte: usize) -> Option<(usize, usize)> {
+        self.value.char_pos(byte)
+    }
+
+    /// Convert a text area position to a char position.
+    /// Uses grapheme based column indexes.
+    #[inline]
+    pub fn char_at(&self, pos: (usize, usize)) -> Option<usize> {
+        self.value.char_at(pos)
     }
 
     /// Add a style for a [TextRange]. The style-nr refers to one
@@ -432,12 +457,7 @@ impl TextAreaState {
         true
     }
 
-    ///
-    pub fn delete_selection(&mut self) -> bool {
-        self.delete_range(self.selection())
-    }
-
-    ///
+    /// Deletes the given range.
     pub fn delete_range(&mut self, range: TextRange) -> bool {
         if !range.is_empty() {
             self.value.remove(range);
@@ -2265,7 +2285,6 @@ pub mod core {
                 panic!("invalid range {:?} value {:?}", range, self.value);
             };
 
-            let t = Instant::now();
             self.value.remove(start_pos..end_pos);
 
             // remove deleted styles.
