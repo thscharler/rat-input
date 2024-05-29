@@ -13,7 +13,6 @@ use rat_input::input::{TextInput, TextInputState};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
-use ratatui::text::Span;
 use ratatui::{Frame, Terminal};
 use std::fs;
 use std::io::{stdout, Stdout};
