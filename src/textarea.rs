@@ -502,12 +502,6 @@ impl TextAreaState {
             panic!("invalid_cursor: {:?} value {:?}", (cx, cy), self.value);
         };
 
-        if cx == c_line_width {
-            if cy == self.value.len_lines() - 1 {
-                return false;
-            }
-        }
-
         if self.value.has_selection() {
             self.value.remove(self.value.selection());
             self.scroll_cursor_to_visible();
