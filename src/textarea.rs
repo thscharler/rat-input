@@ -1573,6 +1573,25 @@ pub mod core {
                     if pos.0 >= self.start.0 {
                         pos.0 = pos.0 - self.start.0 + self.end.0;
                         pos.1 += delta_lines;
+
+            // comparing only the starting position.
+            // the range doesn't exist yet.
+            // have to flip the positions for tuple comparison
+            match (self.start.1, self.start.0).cmp(&(pos.1, pos.0)) {
+                Ordering::Greater => {
+                    // noop
+                }
+                Ordering::Equal => {
+                    *pos = self.end;
+                }
+                Ordering::Less => {
+                    if pos.1 > self.start.1 {
+                        pos.1 += delta_lines;
+                    } else if pos.1 == self.start.1 {
+                        if pos.0 >= self.start.0 {
+                            pos.0 = pos.0 - self.start.0 + self.end.0;
+                            pos.1 += delta_lines;
+                        }
                     }
                 }
             }
