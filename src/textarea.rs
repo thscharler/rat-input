@@ -1404,6 +1404,7 @@ pub mod graphemes {
 
 pub mod core {
     use crate::textarea::graphemes::{rope_len, RopeGraphemesIdx};
+    use log::debug;
     use ropey::iter::Lines;
     use ropey::{Rope, RopeSlice};
     use std::cmp::{min, Ordering};
@@ -1599,13 +1600,16 @@ pub mod core {
         fn _shrink(&self, pos: &mut (usize, usize)) {
             let delta_lines = self.end.1 - self.start.1;
             match self.ordering_inclusive(*pos) {
-                Ordering::Greater => {}
-                Ordering::Equal => *pos = self.start,
+                Ordering::Greater => {
+                    // noop
+                }
+                Ordering::Equal => {
+                    *pos = self.start;
+                }
                 Ordering::Less => {
                     if pos.1 > self.end.1 {
                         pos.1 -= delta_lines;
-                    }
-                    if pos.1 == self.end.1 {
+                    } else if pos.1 == self.end.1 {
                         if pos.0 >= self.end.0 {
                             pos.0 = pos.0 - self.end.0 + self.start.0;
                             pos.1 -= delta_lines;
