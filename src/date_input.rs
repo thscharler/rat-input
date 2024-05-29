@@ -7,6 +7,8 @@ use crate::event::Outcome;
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
 use chrono::format::{Fixed, Item, Numeric, Pad, StrftimeItems};
 use chrono::{Datelike, Days, Local, Months, NaiveDate};
+#[allow(unused_imports)]
+use log::debug;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};

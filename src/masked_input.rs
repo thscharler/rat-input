@@ -444,9 +444,9 @@ pub fn handle_events(
     event: &crossterm::event::Event,
 ) -> Outcome {
     if focus {
-        HandleEvent::handle(state, event, FocusKeys)
+        state.handle(event, FocusKeys)
     } else {
-        HandleEvent::handle(state, event, MouseOnly)
+        state.handle(event, MouseOnly)
     }
 }
 
