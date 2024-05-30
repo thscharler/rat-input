@@ -796,9 +796,6 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for MaskedInpu
         if r == TextOutcome::NotUsed {
             r = self.handle(event, ReadOnly);
         }
-        if r == TextOutcome::NotUsed {
-            r = self.handle(event, MouseOnly);
-        }
         r
     }
 }

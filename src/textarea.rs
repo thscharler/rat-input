@@ -5,6 +5,8 @@ use crate::_private::NonExhaustive;
 use crate::event::{ReadOnly, TextOutcome};
 use crate::textarea::core::{RopeGraphemes, TextRange};
 use crossterm::event::KeyModifiers;
+#[allow(unused_imports)]
+use log::debug;
 use rat_event::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
@@ -1025,9 +1027,6 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextAreaSt
         if r == TextOutcome::NotUsed {
             r = self.handle(event, ReadOnly);
         }
-        if r == TextOutcome::NotUsed {
-            r = self.handle(event, MouseOnly);
-        }
         r
     }
 }
@@ -1141,6 +1140,19 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
                 let cy = m.row as i16 - self.inner.y as i16;
                 self.set_screen_cursor((cx, cy), true).into()
             }
+            // TODO: not happy with this one. Think again.
+            // ct_event!(mouse any for m) if self.mouse.doubleclick(self.inner, m) => {
+            //     let ty = self.offset().1 + m.row as usize - self.inner.y as usize;
+            //     if let Some(tx) =
+            //         self.from_screen_col(ty, m.column as usize - self.inner.x as usize)
+            //     {
+            //         let b0 = self.value.prev_word_boundary((tx, ty)).expect("position");
+            //         let b1 = self.value.next_word_boundary((tx, ty)).expect("position");
+            //         self.set_selection(TextRange::new(b0, b1)).into()
+            //     } else {
+            //         TextOutcome::Unchanged
+            //     }
+            // }
             ct_event!(scroll down for column,row) => {
                 if self.area.contains((*column, *row).into()) {
                     self.scroll_down(self.vertical_scroll()).into()
@@ -1173,21 +1185,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
                 if self.inner.contains((*column, *row).into()) {
                     let cx = (column - self.inner.x) as i16;
                     let cy = (row - self.inner.y) as i16;
-
-                    // TODO: doubleclicky
-                    // self.mouse.set_drag();
-                    // if self.mouse.pull_trigger(1000) {
-                    //     let ty = self.offset().1 + cy as usize;
-                    //     if let Some(tx) = self.from_screen_col(ty, cx as usize) {
-                    //         let b0 = self.value.prev_word_boundary((tx, ty)).expect("position");
-                    //         let b1 = self.value.next_word_boundary((tx, ty)).expect("position");
-                    //         self.set_selection(TextRange::new(b0, b1)).into()
-                    //     } else {
-                    //         TextOutcome::Changed
-                    //     }
-                    // } else {
                     self.set_screen_cursor((cx, cy), false).into()
-                    // }
                 } else {
                     TextOutcome::NotUsed
                 }
