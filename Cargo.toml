@@ -2,7 +2,7 @@
 name = "rat-input"
 version = "0.16.1"
 edition = "2021"
-description = "ratatui text input widgets"
+description = "ratatui data input widgets"
 license = "MIT/Apache-2.0"
 repository = "https://github.com/thscharler/rat-input"
 readme = "readme.md"
