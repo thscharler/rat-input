@@ -3,8 +3,7 @@
 //!
 
 use crate::_private::NonExhaustive;
-use crate::event::Outcome;
-use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
+use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::BlockExt;

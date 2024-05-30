@@ -1,6 +1,6 @@
 [package]
 name = "rat-input"
-version = "0.16.0"
+version = "0.16.1"
 edition = "2021"
 description = "ratatui text input widgets"
 license = "MIT/Apache-2.0"
@@ -57,8 +57,8 @@ format_num_pattern = "0.9"
 log = "0.4"
 ropey = "1.6.1"
 
-rat-event = { version = "0.13" }
-#rat-event = { version = "0.13", path = "../rat-event" }
+rat-event = { version = "0.14" }
+#rat-event = { version = "0.14", path = "../rat-event" }
 
 [dev-dependencies]
 fern = "0.6"

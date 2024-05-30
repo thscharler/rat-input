@@ -4,12 +4,11 @@
 //! Supports hot-keys with '_' in the item text.
 //!
 use crate::_private::NonExhaustive;
-use crate::event::Outcome;
 use crate::util::{next_opt, prev_opt, span_width};
 #[allow(unused_imports)]
 use log::debug;
 use rat_event::util::MouseFlags;
-use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
+use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style, Stylize};

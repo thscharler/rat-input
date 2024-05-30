@@ -1,3 +1,11 @@
+# 0.16.1
+
+* rat-event got a reorg. mirror this.
+
+# 0.16.0
+
+* Use new MouseFlags.
+
 # 0.15.0
 
 * Add TextArea.

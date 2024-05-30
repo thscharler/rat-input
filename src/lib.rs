@@ -24,8 +24,9 @@ pub mod event {
     //! Event-handler traits and Keybindings.
     //!
 
-    pub use rat_event::util::Outcome;
-    pub use rat_event::{ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
+    pub use rat_event::{
+        crossterm, ct_event, util, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome,
+    };
 
     /// Runs only the navigation events, not any editing.
     #[derive(Debug)]
