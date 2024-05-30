@@ -4,13 +4,13 @@
 
 use crate::_private::NonExhaustive;
 use crate::event::Outcome;
-use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
+use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, StatefulWidget, WidgetRef};
+use ratatui::widgets::{Block, StatefulWidget, Widget};
 
 /// Button widget.
 #[derive(Debug, Default, Clone)]
@@ -182,7 +182,7 @@ impl<'a> StatefulWidget for Button<'a> {
         state.area = area;
         state.inner_area = self.block.inner_if_some(area);
 
-        self.block.render_ref(area, buf);
+        self.block.render(area, buf);
 
         let focus_style = if let Some(focus_style) = self.focus_style {
             focus_style
@@ -212,7 +212,7 @@ impl<'a> StatefulWidget for Button<'a> {
         ])
         .split(state.inner_area);
 
-        self.text.render_ref(layout[1], buf);
+        self.text.render(layout[1], buf);
     }
 }
 
@@ -242,8 +242,8 @@ pub enum ButtonOutcome {
     Pressed,
 }
 
-impl UsedEvent for ButtonOutcome {
-    fn used_event(&self) -> bool {
+impl ConsumedEvent for ButtonOutcome {
+    fn is_consumed(&self) -> bool {
         *self != ButtonOutcome::NotUsed
     }
 }
@@ -285,7 +285,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, ButtonOutcome> for ButtonSt
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> ButtonOutcome {
         match event {
             ct_event!(mouse down Left for column, row) => {
-                if self.area.contains(Position::new(*column, *row)) {
+                if self.area.contains((*column, *row).into()) {
                     self.armed = true;
                     ButtonOutcome::Changed
                 } else {
@@ -293,7 +293,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, ButtonOutcome> for ButtonSt
                 }
             }
             ct_event!(mouse up Left for column, row) => {
-                if self.area.contains(Position::new(*column, *row)) {
+                if self.area.contains((*column, *row).into()) {
                     self.armed = false;
                     ButtonOutcome::Pressed
                 } else {

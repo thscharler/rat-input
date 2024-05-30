@@ -18,13 +18,15 @@
 use crate::_private::NonExhaustive;
 use crate::event::{ReadOnly, TextOutcome};
 use crate::util;
-use crate::util::MouseFlags;
+#[allow(unused_imports)]
+use log::debug;
+use rat_event::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
-use ratatui::widgets::{Block, StatefulWidget, WidgetRef};
+use ratatui::widgets::{Block, StatefulWidget, Widget};
 use std::cmp::{max, min};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
@@ -153,7 +155,7 @@ impl<'a> StatefulWidget for TextInput<'a> {
         state.inner = self.block.inner_if_some(area);
         state.value.set_width(state.inner.width as usize);
 
-        self.block.render_ref(area, buf);
+        self.block.render(area, buf);
 
         let area = state.inner.intersection(buf.area);
 
@@ -637,26 +639,17 @@ impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for TextInputSt
 impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextInputState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
         match event {
+            ct_event!(mouse any for m) if self.mouse.drag(self.area, m) => {
+                let c = (m.column as isize) - (self.inner.x as isize);
+                self.set_screen_cursor(c, true).into()
+            }
             ct_event!(mouse down Left for column,row) => {
-                if self.inner.contains(Position::new(*column, *row)) {
-                    self.mouse.set_drag();
+                if self.inner.contains((*column, *row).into()) {
                     let c = column - self.inner.x;
                     self.set_screen_cursor(c as isize, false).into()
                 } else {
                     TextOutcome::NotUsed
                 }
-            }
-            ct_event!(mouse drag Left for column, _row) => {
-                if self.mouse.do_drag() {
-                    let c = (*column as isize) - (self.inner.x as isize);
-                    self.set_screen_cursor(c, true).into()
-                } else {
-                    TextOutcome::NotUsed
-                }
-            }
-            ct_event!(mouse moved) => {
-                self.mouse.clear_drag();
-                TextOutcome::NotUsed
             }
             _ => TextOutcome::NotUsed,
         }

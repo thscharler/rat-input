@@ -5,13 +5,13 @@
 //!
 use crate::_private::NonExhaustive;
 use crate::event::Outcome;
-use crate::util::MouseFlags;
 use crate::util::{next_opt, prev_opt, span_width};
 #[allow(unused_imports)]
 use log::debug;
-use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly, UsedEvent};
+use rat_event::util::MouseFlags;
+use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{StatefulWidget, Widget};
@@ -276,9 +276,9 @@ impl MenuLineState {
     }
 
     #[inline]
-    pub fn item_at(&self, pos: Position) -> Option<usize> {
+    pub fn item_at(&self, pos: (u16, u16)) -> Option<usize> {
         for (i, r) in self.areas.iter().enumerate() {
-            if r.contains(pos) {
+            if r.contains(pos.into()) {
                 return Some(i);
             }
         }
@@ -324,8 +324,8 @@ pub enum MenuOutcome {
     Activated(usize),
 }
 
-impl UsedEvent for MenuOutcome {
-    fn used_event(&self) -> bool {
+impl ConsumedEvent for MenuOutcome {
+    fn is_consumed(&self) -> bool {
         *self != MenuOutcome::NotUsed
     }
 }
@@ -436,9 +436,19 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineSt
 impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for MenuLineState {
     fn handle(&mut self, event: &crossterm::event::Event, _: MouseOnly) -> MenuOutcome {
         match event {
-            ct_event!(mouse down Left for col, row) => {
-                if let Some(i) = self.item_at(Position::new(*col, *row)) {
-                    self.mouse.set_drag();
+            ct_event!(mouse any for m) if self.mouse.doubleclick(self.area, m) => {
+                let idx = self.item_at(self.mouse.pos_of(m));
+                if self.selected() == idx {
+                    match self.selected {
+                        Some(a) => MenuOutcome::Activated(a),
+                        None => MenuOutcome::NotUsed,
+                    }
+                } else {
+                    MenuOutcome::NotUsed
+                }
+            }
+            ct_event!(mouse any for m) if self.mouse.drag(self.area, m) => {
+                if let Some(i) = self.item_at(self.mouse.pos_of(m)) {
                     self.select(Some(i));
                     match self.selected {
                         Some(a) => MenuOutcome::Selected(a),
@@ -448,36 +458,16 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for MenuLineSt
                     MenuOutcome::NotUsed
                 }
             }
-            ct_event!(mouse drag Left for col, row) => {
-                if self.mouse.do_drag() {
-                    if let Some(i) = self.item_at(Position::new(*col, *row)) {
-                        self.mouse.set_drag();
-                        self.select(Some(i));
-                        match self.selected {
-                            Some(a) => MenuOutcome::Selected(a),
-                            None => unreachable!(),
-                        }
-                    } else {
-                        MenuOutcome::NotUsed
-                    }
-                } else {
-                    MenuOutcome::NotUsed
-                }
-            }
-            ct_event!(mouse up Left for col,row) => {
-                let idx = self.item_at(Position::new(*col, *row));
-                if self.selected() == idx && self.mouse.pull_trigger(500) {
+            ct_event!(mouse down Left for col, row) => {
+                if let Some(i) = self.item_at((*col, *row)) {
+                    self.select(Some(i));
                     match self.selected {
-                        Some(a) => MenuOutcome::Activated(a),
-                        None => MenuOutcome::NotUsed,
+                        Some(a) => MenuOutcome::Selected(a),
+                        None => unreachable!(),
                     }
                 } else {
                     MenuOutcome::NotUsed
                 }
-            }
-            ct_event!(mouse moved) => {
-                self.mouse.clear_drag();
-                MenuOutcome::NotUsed
             }
             _ => MenuOutcome::NotUsed,
         }

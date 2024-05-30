@@ -9,6 +9,7 @@ pub mod date_input;
 pub mod input;
 pub mod layout_dialog;
 pub mod layout_edit;
+pub mod layout_grid;
 pub mod masked_input;
 pub mod menuline;
 pub mod msgdialog;
@@ -24,7 +25,7 @@ pub mod event {
     //!
 
     pub use rat_event::util::Outcome;
-    pub use rat_event::{FocusKeys, HandleEvent, MouseOnly, UsedEvent};
+    pub use rat_event::{ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
 
     /// Runs only the navigation events, not any editing.
     #[derive(Debug)]
@@ -47,8 +48,8 @@ pub mod event {
         TextChanged,
     }
 
-    impl UsedEvent for TextOutcome {
-        fn used_event(&self) -> bool {
+    impl ConsumedEvent for TextOutcome {
+        fn is_consumed(&self) -> bool {
             *self != TextOutcome::NotUsed
         }
     }
