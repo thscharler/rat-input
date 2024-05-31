@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use log::debug;
-use ratatui::style::{Color, Style, Stylize};
+use ratatui::style::{Style, Stylize};
 use ratatui::text::Span;
 use std::cmp::min;
 use std::iter::once;
