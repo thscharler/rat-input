@@ -4,7 +4,7 @@
 //! Supports hot-keys with '_' in the item text.
 //!
 use crate::_private::NonExhaustive;
-use crate::util::{next_opt, prev_opt, span_width};
+use crate::util::{next_opt, prev_opt, revert_style, span_width};
 #[allow(unused_imports)]
 use log::debug;
 use rat_event::util::MouseFlags;
@@ -17,7 +17,10 @@ use ratatui::widgets::{StatefulWidget, Widget};
 use std::cmp::min;
 use std::fmt::Debug;
 
-/// Menu
+///
+/// Menu widget.
+///
+/// If the text exceeds the area width it wraps around.
 #[derive(Debug, Default, Clone)]
 pub struct MenuLine<'a> {
     style: Style,
@@ -40,7 +43,9 @@ pub struct MenuStyle {
     pub non_exhaustive: NonExhaustive,
 }
 
-/// State for the menu.
+///
+/// State for the menu widget
+///
 #[derive(Debug, Clone)]
 pub struct MenuLineState {
     /// Focus
@@ -135,6 +140,7 @@ impl<'a> StatefulWidget for MenuLine<'a> {
         let mut col = area.x;
 
         state.area = area;
+        state.areas.clear();
         state.key = self.key;
         state.selected = min(state.selected, Some(self.menu.len() - 1));
 
@@ -142,13 +148,13 @@ impl<'a> StatefulWidget for MenuLine<'a> {
             if let Some(focus_style) = self.focus_style {
                 focus_style
             } else {
-                self.style.reversed()
+                revert_style(self.style)
             }
         } else {
             if let Some(select_style) = self.select_style {
                 select_style
             } else {
-                self.style.reversed()
+                revert_style(self.style)
             }
         };
         let title_style = if let Some(title_style) = self.title_style {
@@ -156,6 +162,8 @@ impl<'a> StatefulWidget for MenuLine<'a> {
         } else {
             self.style.underlined()
         };
+
+        buf.set_style(area, self.style);
 
         let mut text = Text::default();
         let mut line = Line::default();
@@ -169,32 +177,43 @@ impl<'a> StatefulWidget for MenuLine<'a> {
             col += title_width + 1;
         }
 
-        for (n, mut item) in self.menu.into_iter().enumerate() {
-            let item_width = span_width(&item);
-            if col + item_width > area.x + area.width {
-                text.lines.push(line);
-                line = Line::default();
+        'f: {
+            for (n, mut item) in self.menu.into_iter().enumerate() {
+                let item_width = span_width(&item);
 
-                row += 1;
-                col = area.x;
-            }
+                // line breaks
+                if col + item_width > area.x + area.width {
+                    text.lines.push(line);
 
-            if state.selected == Some(n) {
-                for v in &mut item {
-                    v.style = v.style.patch(select_style)
+                    if row + 1 >= area.y + area.height {
+                        break 'f;
+                    }
+
+                    line = Line::default();
+
+                    row += 1;
+                    col = area.x;
                 }
+
+                if state.selected == Some(n) {
+                    for v in &mut item {
+                        v.style = v.style.patch(select_style)
+                    }
+                }
+
+                state
+                    .areas
+                    .push(Rect::new(col, row, item_width, 1).intersection(area));
+
+                line.spans.extend(item);
+                line.spans.push(" ".into());
+
+                col += item_width + 1;
             }
-
-            state.areas.push(Rect::new(col, row, item_width, 1));
-
-            line.spans.extend(item);
-            line.spans.push(" ".into());
-
-            col += item_width + 1;
+            // for-else
+            text.lines.push(line);
         }
-        text.lines.push(line);
 
-        text.style = self.style;
         text.render(area, buf);
     }
 }
@@ -248,23 +267,30 @@ impl MenuLineState {
         Self::default()
     }
 
+    /// Number of items.
     #[inline]
     pub fn len(&self) -> usize {
         self.areas.len()
     }
 
+    /// Selected index
     #[inline]
     pub fn selected(&self) -> Option<usize> {
         self.selected
     }
 
+    /// Select
     #[inline]
-    pub fn select(&mut self, select: Option<usize>) {
+    pub fn select(&mut self, select: Option<usize>) -> bool {
+        let old_selected = self.selected;
         self.selected = select;
+        old_selected != self.selected
     }
 
+    /// Select by hotkey
     #[inline]
-    pub fn select_by_key(&mut self, cc: char) {
+    pub fn select_by_key(&mut self, cc: char) -> bool {
+        let old_selected = self.selected;
         let cc = cc.to_ascii_lowercase();
         for (i, k) in self.key.iter().enumerate() {
             if cc == *k {
@@ -272,8 +298,10 @@ impl MenuLineState {
                 break;
             }
         }
+        old_selected != self.selected
     }
 
+    /// Item at position.
     #[inline]
     pub fn item_at(&self, pos: (u16, u16)) -> Option<usize> {
         for (i, r) in self.areas.iter().enumerate() {
@@ -284,14 +312,20 @@ impl MenuLineState {
         None
     }
 
+    /// Next item.
     #[inline]
-    pub fn next(&mut self) {
-        self.selected = next_opt(self.selected, 1, self.len() + 1);
+    pub fn next(&mut self) -> bool {
+        let old_selected = self.selected;
+        self.selected = next_opt(self.selected, 1, self.len());
+        old_selected != self.selected
     }
 
+    /// Previous item.
     #[inline]
-    pub fn prev(&mut self) {
+    pub fn prev(&mut self) -> bool {
+        let old_selected = self.selected;
         self.selected = prev_opt(self.selected, 1);
+        old_selected != self.selected
     }
 }
 
@@ -308,7 +342,7 @@ impl Default for MenuLineState {
     }
 }
 
-/// Outcome for menuline
+/// Outcome for menuline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuOutcome {
     /// The given event was not handled at all.
@@ -349,10 +383,10 @@ impl HandleEvent<crossterm::event::Event, HotKeyCtrl, MenuOutcome> for MenuLineS
     fn handle(&mut self, event: &crossterm::event::Event, _: HotKeyCtrl) -> MenuOutcome {
         match event {
             ct_event!(key release CONTROL-cc) => {
-                self.select_by_key(*cc);
-                match self.selected {
-                    Some(a) => MenuOutcome::Activated(a),
-                    None => MenuOutcome::NotUsed,
+                if self.select_by_key(*cc) {
+                    MenuOutcome::Activated(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
                 }
             }
             _ => MenuOutcome::NotUsed,
@@ -368,10 +402,10 @@ impl HandleEvent<crossterm::event::Event, HotKeyAlt, MenuOutcome> for MenuLineSt
     fn handle(&mut self, event: &crossterm::event::Event, _: HotKeyAlt) -> MenuOutcome {
         match event {
             ct_event!(key release ALT-cc) => {
-                self.select_by_key(*cc);
-                match self.selected {
-                    Some(a) => MenuOutcome::Activated(a),
-                    None => MenuOutcome::NotUsed,
+                if self.select_by_key(*cc) {
+                    MenuOutcome::Activated(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
                 }
             }
             _ => MenuOutcome::NotUsed,
@@ -383,44 +417,44 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineSt
     fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> MenuOutcome {
         let res = match event {
             ct_event!(key release cc) => {
-                self.select_by_key(*cc);
-                match self.selected {
-                    Some(a) => MenuOutcome::Activated(a),
-                    None => MenuOutcome::NotUsed,
+                if self.select_by_key(*cc) {
+                    MenuOutcome::Activated(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
                 }
             }
             ct_event!(keycode press Left) => {
-                self.prev();
-                match self.selected {
-                    Some(a) => MenuOutcome::Selected(a),
-                    None => unreachable!(),
+                if self.prev() {
+                    MenuOutcome::Selected(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
                 }
             }
             ct_event!(keycode press Right) => {
-                self.next();
-                match self.selected {
-                    Some(a) => MenuOutcome::Selected(a),
-                    None => unreachable!(),
+                if self.next() {
+                    MenuOutcome::Selected(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
                 }
             }
             ct_event!(keycode press Home) => {
-                self.select(Some(0));
-                match self.selected {
-                    Some(a) => MenuOutcome::Selected(a),
-                    None => unreachable!(),
+                if self.select(Some(0)) {
+                    MenuOutcome::Selected(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
                 }
             }
             ct_event!(keycode press End) => {
-                self.select(Some(self.len() - 1));
-                match self.selected {
-                    Some(a) => MenuOutcome::Selected(a),
-                    None => unreachable!(),
+                if self.select(Some(self.len() - 1)) {
+                    MenuOutcome::Selected(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
                 }
             }
-            ct_event!(keycode release Enter) => match self.selected {
-                Some(a) => MenuOutcome::Activated(a),
-                None => MenuOutcome::NotUsed,
-            },
+            ct_event!(keycode release Enter) => self
+                .selected
+                .map_or(MenuOutcome::Unchanged, |v| MenuOutcome::Activated(v)),
+
             _ => MenuOutcome::NotUsed,
         };
 

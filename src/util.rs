@@ -1,10 +1,21 @@
 #[allow(unused_imports)]
 use log::debug;
+use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Span;
 use std::cmp::min;
 use std::iter::once;
+use std::mem;
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
+
+pub(crate) fn revert_style(mut style: Style) -> Style {
+    if style.fg.is_some() && style.bg.is_some() {
+        mem::swap(&mut style.fg, &mut style.bg);
+        style
+    } else {
+        style.black().on_white()
+    }
+}
 
 /// Sum all widths.
 pub(crate) fn span_width(spans: &[Span<'_>]) -> u16 {
@@ -21,9 +32,9 @@ pub(crate) fn prev_opt(select: Option<usize>, change: usize) -> Option<usize> {
 }
 
 /// Select next.
-pub(crate) fn next_opt(selected: Option<usize>, change: usize, max: usize) -> Option<usize> {
+pub(crate) fn next_opt(selected: Option<usize>, change: usize, len: usize) -> Option<usize> {
     if let Some(select) = selected {
-        Some(next(select, change, max))
+        Some(next(select, change, len))
     } else {
         Some(0)
     }
@@ -35,8 +46,15 @@ pub(crate) fn prev(select: usize, change: usize) -> usize {
 }
 
 /// Select next.
-pub(crate) fn next(select: usize, change: usize, max: usize) -> usize {
-    min(select + change, max)
+pub(crate) fn next(select: usize, change: usize, len: usize) -> usize {
+    debug!(
+        "next {}+{} | {} -> {}",
+        select,
+        change,
+        len,
+        min(select + change, len.saturating_sub(1))
+    );
+    min(select + change, len.saturating_sub(1))
 }
 
 /// Length in graphemes.
