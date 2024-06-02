@@ -55,6 +55,34 @@ impl LayoutEdit {
         self.widget[n].expect("layout-error")
     }
 
+    /// Returns the label nr at the given position.
+    pub fn label_at(&self, pos: (u16, u16)) -> Option<usize> {
+        let mut nr = 0;
+        for i in 0..self.widget.len() {
+            if let Some(label) = self.label[i] {
+                if label.contains(pos.into()) {
+                    return Some(nr);
+                }
+                nr += 1;
+            }
+        }
+        return None;
+    }
+
+    /// Returns the widget nr at the given position.
+    pub fn widget_at(&self, pos: (u16, u16)) -> Option<usize> {
+        let mut nr = 0;
+        for i in 0..self.widget.len() {
+            if let Some(widget) = self.widget[i] {
+                if widget.contains(pos.into()) {
+                    return Some(nr);
+                }
+                nr += 1;
+            }
+        }
+        return None;
+    }
+
     /// Create an iterator look-alike that gives access to both
     /// label and widget areas.
     ///
