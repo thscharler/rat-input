@@ -1,3 +1,7 @@
+# 0.16.2
+
+* add label_at, widget_at to LayoutEdit.
+
 # 0.16.1
 
 * rat-event got a reorg. mirror this.
