@@ -1,3 +1,11 @@
+# 0.16.3
+
+* add Fill widget. Clears an area.
+
+* fix menuline panic by `- 1`
+* fix strange but when a menu is selected at startup. reacted to Release-Enter
+  of starting the program on the command line.
+
 # 0.16.2
 
 * add label_at, widget_at to LayoutEdit.
