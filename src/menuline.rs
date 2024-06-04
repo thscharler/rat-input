@@ -416,7 +416,7 @@ impl HandleEvent<crossterm::event::Event, HotKeyAlt, MenuOutcome> for MenuLineSt
 impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineState {
     fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> MenuOutcome {
         let res = match event {
-            ct_event!(key release cc) => {
+            ct_event!(key press cc) => {
                 if self.select_by_key(*cc) {
                     MenuOutcome::Activated(self.selected.expect("selected"))
                 } else {
@@ -451,9 +451,16 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineSt
                     MenuOutcome::Unchanged
                 }
             }
-            ct_event!(keycode release Enter) => self
+            ct_event!(keycode press Enter) => self
                 .selected
                 .map_or(MenuOutcome::Unchanged, |v| MenuOutcome::Activated(v)),
+
+            ct_event!(key release _)
+            | ct_event!(keycode release Left)
+            | ct_event!(keycode release Right)
+            | ct_event!(keycode release Home)
+            | ct_event!(keycode release End)
+            | ct_event!(keycode release Enter) => MenuOutcome::Unchanged,
 
             _ => MenuOutcome::NotUsed,
         };
