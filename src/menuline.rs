@@ -142,7 +142,7 @@ impl<'a> StatefulWidget for MenuLine<'a> {
         state.area = area;
         state.areas.clear();
         state.key = self.key;
-        state.selected = min(state.selected, Some(self.menu.len() - 1));
+        state.selected = min(state.selected, Some(self.menu.len().saturating_sub(1)));
 
         let select_style = if self.focused {
             if let Some(focus_style) = self.focus_style {
@@ -445,7 +445,7 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineSt
                 }
             }
             ct_event!(keycode press End) => {
-                if self.select(Some(self.len() - 1)) {
+                if self.select(Some(self.len().saturating_sub(1))) {
                     MenuOutcome::Selected(self.selected.expect("selected"))
                 } else {
                     MenuOutcome::Unchanged
