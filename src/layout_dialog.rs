@@ -1,11 +1,15 @@
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
 
-/// Layout produced by [layout_dialog]
+/// Layout produced by [layout_dialog].
 #[derive(Debug)]
 pub struct LayoutDialog<const N: usize> {
+    /// Complete area covered by the dialog box.
     pub dialog: Rect,
+    /// Area that is not used by borders and buttons.
     pub area: Rect,
+    /// Complete button area.
     pub button_area: Rect,
+    /// Areas for each button.
     pub buttons: [Rect; N],
 }
 
