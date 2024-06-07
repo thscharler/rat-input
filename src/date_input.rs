@@ -139,10 +139,7 @@ impl DateInputState {
     }
 
     #[inline]
-    pub fn new_localized<S: AsRef<str>>(
-        pattern: S,
-        locale: chrono::Locale,
-    ) -> Result<Self, fmt::Error> {
+    pub fn new_loc<S: AsRef<str>>(pattern: S, locale: chrono::Locale) -> Result<Self, fmt::Error> {
         let mut s = Self::default();
         s.set_format_loc(pattern, locale)?;
         Ok(s)

@@ -191,7 +191,7 @@ impl<'a> StatefulWidget for TextInput<'a> {
                     self.style.patch(invalid_style),
                 )
             } else {
-                (self.style, select_style)
+                (self.style, self.style)
             }
         };
 
