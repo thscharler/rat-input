@@ -4,6 +4,7 @@
 
 * rename new_localized() to new_loc()
 * fix: TextInput shouldn't render selection if not focused.
+*
 
 # 0.16.3
 
