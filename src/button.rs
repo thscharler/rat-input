@@ -266,8 +266,13 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, ButtonOutcome> for ButtonSt
                 ButtonOutcome::Changed
             }
             ct_event!(keycode release Enter) => {
-                self.armed = false;
-                ButtonOutcome::Pressed
+                if !self.armed {
+                    self.armed = false;
+                    ButtonOutcome::Pressed
+                } else {
+                    // single key release happen more often than not.
+                    ButtonOutcome::NotUsed
+                }
             }
             _ => ButtonOutcome::NotUsed,
         };
