@@ -1,3 +1,10 @@
+# 0.16.4
+
+* add NumberInput
+
+* rename new_localized() to new_loc()
+* fix: TextInput shouldn't render selection if not focused.
+
 # 0.16.3
 
 * add Fill widget. Clears an area.

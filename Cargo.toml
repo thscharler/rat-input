@@ -1,6 +1,6 @@
 [package]
 name = "rat-input"
-version = "0.16.3"
+version = "0.16.4"
 edition = "2021"
 description = "ratatui data input widgets"
 license = "MIT/Apache-2.0"
