@@ -677,7 +677,7 @@ impl MaskedInputState {
         self.value.set_cursor(c, extend_selection)
     }
 
-    // End of line
+    /// End of line
     #[inline]
     pub fn move_to_line_end(&mut self, extend_selection: bool) -> bool {
         let c = self.value.len();
