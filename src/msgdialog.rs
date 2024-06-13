@@ -5,7 +5,7 @@
 use crate::_private::NonExhaustive;
 use crate::button::{Button, ButtonOutcome, ButtonState, ButtonStyle};
 use crate::layout_dialog::layout_dialog;
-use rat_event::{ct_event, FocusKeys, HandleEvent, Outcome};
+use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, Outcome};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Flex, Margin, Rect};
 use ratatui::style::Style;
@@ -158,26 +158,26 @@ impl StatefulWidget for MsgDialog {
 impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MsgDialogState {
     fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> Outcome {
         if self.active {
-            let r = match self.button.handle(event, FocusKeys) {
+            match self.button.handle(event, FocusKeys) {
                 ButtonOutcome::Pressed => {
                     self.clear();
                     self.active = false;
                     Outcome::Changed
                 }
                 v => v.into(),
-            };
-            if r == Outcome::NotUsed {
-                match event {
-                    ct_event!(keycode press Esc) => {
-                        self.clear();
-                        self.active = false;
-                        Outcome::Changed
-                    }
-                    _ => Outcome::NotUsed,
-                }
-            } else {
-                r
             }
+            .or_else(|| match event {
+                ct_event!(keycode press Esc) => {
+                    self.clear();
+                    self.active = false;
+                    Outcome::Changed
+                }
+                _ => Outcome::NotUsed,
+            })
+            .or_else(|| {
+                // mandatory consume everything else.
+                Outcome::Unchanged
+            })
         } else {
             Outcome::NotUsed
         }
