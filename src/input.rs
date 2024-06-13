@@ -767,7 +767,7 @@ pub mod core {
         /// Cursor position as grapheme-idx. Moves the cursor to the new position,
         /// but can leave the current cursor position as anchor of the selection.
         pub fn set_cursor(&mut self, cursor: usize, extend_selection: bool) -> bool {
-            let old_cursor = self.cursor;
+            let old_selection = (self.cursor, self.anchor);
 
             let c = min(self.len, cursor);
 
@@ -783,7 +783,7 @@ pub mod core {
                 self.offset = c - self.width;
             }
 
-            c != old_cursor
+            (self.cursor, self.anchor) != old_selection
         }
 
         /// Cursor position as grapheme-idx.
@@ -1003,51 +1003,53 @@ pub mod core {
             let mut char_buf = mem::take(&mut self.char_buf);
             char_buf.clear();
             char_buf.push(new);
-            self.replace(selection, char_buf.as_str());
+
+            let r = self.replace(selection, char_buf.as_str());
+
             self.char_buf = char_buf;
 
-            true
+            r
         }
 
         /// Remove the selection.
+        #[inline]
         pub fn remove(&mut self, range: Range<usize>) -> bool {
-            if range.is_empty() {
-                false
-            } else {
-                self.replace(range, "");
-                true
-            }
+            self.replace(range, "")
         }
 
         /// Insert a string, replacing the selection.
-        fn replace(&mut self, range: Range<usize>, new: &str) {
-            let (before_str, _, after_str) = util::split3(self.value.as_str(), range.clone());
+        pub fn replace(&mut self, range: Range<usize>, new: &str) -> bool {
+            let (before_str, remove_str, after_str) =
+                util::split3(self.value.as_str(), range.clone());
+
+            self.buf.clear();
+            self.buf.push_str(before_str);
+            self.buf.push_str(remove_str);
+            let old_end = self.buf.graphemes(true).count();
             self.buf.clear();
             self.buf.push_str(before_str);
             self.buf.push_str(new);
+            let new_end = self.buf.graphemes(true).count();
             self.buf.push_str(after_str);
             mem::swap(&mut self.value, &mut self.buf);
 
-            let old_len = self.len;
-            let new_len = self.value.graphemes(true).count();
-            let c_ins = new_len as isize - old_len as isize;
-
-            self.len = new_len;
+            let change_len = new_end as isize - old_end as isize;
+            self.len = (self.len as isize + change_len) as usize;
 
             if self.cursor < range.start {
                 // noop
-            } else if self.cursor < range.end {
-                self.cursor = range.start;
+            } else if self.cursor <= range.end {
+                self.cursor = new_end;
             } else {
-                self.cursor = (self.cursor as isize + c_ins) as usize;
+                self.cursor = (self.cursor as isize + change_len) as usize;
             }
 
             if self.anchor < range.start {
                 // noop
-            } else if self.anchor < range.end {
-                self.anchor = range.start;
+            } else if self.anchor <= range.end {
+                self.anchor = new_end;
             } else {
-                self.anchor = (self.anchor as isize + c_ins) as usize;
+                self.anchor = (self.anchor as isize + change_len) as usize;
             }
 
             // fix offset
@@ -1056,6 +1058,8 @@ pub mod core {
             } else if self.offset + self.width < self.cursor {
                 self.offset = self.cursor - self.width;
             }
+
+            true
         }
     }
 }
