@@ -1,3 +1,11 @@
+* impl StatefulWidgetRef
+* DateInput, NumberInput: add all functions from the underlying MaskedInput.
+
+* fix MsgDialog: must consume all events.
+* fix TextInput replace text.
+* fix Button + Enter
+* fix Button + orphaned release Enter
+
 # 0.16.4
 
 * add NumberInput
