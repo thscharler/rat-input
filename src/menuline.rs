@@ -143,7 +143,7 @@ impl<'a> StatefulWidget for MenuLine<'a> {
     }
 }
 
-fn render_ref<'a>(widget: &MenuLine<'a>, area: Rect, buf: &mut Buffer, state: &mut MenuLineState) {
+fn render_ref(widget: &MenuLine<'_>, area: Rect, buf: &mut Buffer, state: &mut MenuLineState) {
     let mut row = area.y;
     let mut col = area.x;
 
@@ -188,7 +188,7 @@ fn render_ref<'a>(widget: &MenuLine<'a>, area: Rect, buf: &mut Buffer, state: &m
 
     'f: {
         for (n, item) in widget.menu.iter().enumerate() {
-            let item_width = span_width(&item);
+            let item_width = span_width(item);
 
             // line breaks
             if col + item_width > area.x + area.width {
@@ -339,6 +339,7 @@ impl MenuLineState {
 
     /// Next item.
     #[inline]
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> bool {
         let old_selected = self.selected;
         self.selected = next_opt(self.selected, 1, self.len());
@@ -440,6 +441,7 @@ impl HandleEvent<crossterm::event::Event, HotKeyAlt, MenuOutcome> for MenuLineSt
 }
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineState {
+    #[allow(clippy::redundant_closure)]
     fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> MenuOutcome {
         let res = match event {
             ct_event!(key press cc) => {

@@ -219,8 +219,8 @@ impl<'a> StatefulWidget for MaskedInput<'a> {
     }
 }
 
-fn render_ref<'a>(
-    widget: &MaskedInput<'a>,
+fn render_ref(
+    widget: &MaskedInput<'_>,
     area: Rect,
     buf: &mut Buffer,
     state: &mut MaskedInputState,

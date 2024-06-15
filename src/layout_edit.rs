@@ -66,7 +66,7 @@ impl LayoutEdit {
                 nr += 1;
             }
         }
-        return None;
+        None
     }
 
     /// Returns the widget nr at the given position.
@@ -80,7 +80,7 @@ impl LayoutEdit {
                 nr += 1;
             }
         }
-        return None;
+        None
     }
 
     /// Create an iterator look-alike that gives access to both

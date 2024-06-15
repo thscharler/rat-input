@@ -140,7 +140,7 @@ impl<'a> StatefulWidgetRef for TextInput<'a> {
     type State = TextInputState;
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        render_ref(&self, area, buf, state);
+        render_ref(self, area, buf, state);
     }
 }
 
@@ -152,12 +152,7 @@ impl<'a> StatefulWidget for TextInput<'a> {
     }
 }
 
-fn render_ref<'a>(
-    widget: &TextInput<'a>,
-    area: Rect,
-    buf: &mut Buffer,
-    state: &mut TextInputState,
-) {
+fn render_ref(widget: &TextInput<'_>, area: Rect, buf: &mut Buffer, state: &mut TextInputState) {
     state.area = area;
     state.inner = widget.block.inner_if_some(area);
     state.value.set_width(state.inner.width as usize);

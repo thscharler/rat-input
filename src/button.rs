@@ -186,7 +186,7 @@ impl<'a> StatefulWidget for Button<'a> {
     }
 }
 
-fn render_ref<'a>(widget: &Button<'a>, area: Rect, buf: &mut Buffer, state: &mut ButtonState) {
+fn render_ref(widget: &Button<'_>, area: Rect, buf: &mut Buffer, state: &mut ButtonState) {
     state.area = area;
     state.inner_area = widget.block.inner_if_some(area);
 

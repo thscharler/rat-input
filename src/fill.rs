@@ -54,7 +54,7 @@ impl<'a> Widget for Fill<'a> {
     }
 }
 
-fn render_ref<'a>(widget: &Fill<'a>, area: Rect, buf: &mut Buffer) {
+fn render_ref(widget: &Fill<'_>, area: Rect, buf: &mut Buffer) {
     let area = buf.area.intersection(area);
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {

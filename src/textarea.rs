@@ -154,7 +154,7 @@ impl<'a> StatefulWidget for TextArea<'a> {
     }
 }
 
-fn render_ref<'a>(widget: &TextArea<'a>, area: Rect, buf: &mut Buffer, state: &mut TextAreaState) {
+fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut TextAreaState) {
     state.area = area;
     state.inner = widget.block.inner_if_some(area);
 
