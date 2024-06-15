@@ -59,6 +59,8 @@ ropey = "1.6.1"
 
 rat-event = { version = "0.14" }
 #rat-event = { version = "0.14", path = "../rat-event" }
+#rat-focus = { version = "0.10" }
+rat-focus = { version = "0.10", path = "../rat-focus" }
 
 [dev-dependencies]
 fern = "0.6"
