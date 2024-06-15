@@ -13,7 +13,7 @@ use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui::widgets::{Block, StatefulWidget};
+use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef};
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -110,6 +110,14 @@ impl<'a> DateInput<'a> {
     pub fn invalid(mut self, invalid: bool) -> Self {
         self.widget = self.widget.invalid(invalid);
         self
+    }
+}
+
+impl<'a> StatefulWidgetRef for DateInput<'a> {
+    type State = DateInputState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.widget.render_ref(area, buf, &mut state.widget);
     }
 }
 

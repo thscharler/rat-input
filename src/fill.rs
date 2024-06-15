@@ -1,7 +1,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui::widgets::Widget;
+use ratatui::widgets::{Widget, WidgetRef};
 
 /// Fill the area with a grapheme and a style.
 /// Useful when overwriting an already rendered buffer
@@ -39,18 +39,28 @@ impl<'a> Fill<'a> {
     }
 }
 
+impl<'a> WidgetRef for Fill<'a> {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        render_ref(self, area, buf);
+    }
+}
+
 impl<'a> Widget for Fill<'a> {
     fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
-        let area = buf.area.intersection(area);
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
-                let cell = buf.get_mut(x, y);
-                cell.set_symbol(self.c);
-                cell.set_style(self.style);
-            }
+        render_ref(&self, area, buf);
+    }
+}
+
+fn render_ref<'a>(widget: &Fill<'a>, area: Rect, buf: &mut Buffer) {
+    let area = buf.area.intersection(area);
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            let cell = buf.get_mut(x, y);
+            cell.set_symbol(widget.c);
+            cell.set_style(widget.style);
         }
     }
 }

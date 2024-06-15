@@ -13,7 +13,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{StatefulWidget, Widget};
+use ratatui::widgets::{StatefulWidget, StatefulWidgetRef, Widget};
 use std::cmp::min;
 use std::fmt::Debug;
 
@@ -132,90 +132,104 @@ impl<'a> MenuLine<'a> {
     }
 }
 
+impl<'a> StatefulWidgetRef for MenuLine<'a> {
+    type State = MenuLineState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(self, area, buf, state);
+    }
+}
+
 impl<'a> StatefulWidget for MenuLine<'a> {
     type State = MenuLineState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let mut row = area.y;
-        let mut col = area.x;
+        render_ref(&self, area, buf, state);
+    }
+}
 
-        state.area = area;
-        state.areas.clear();
-        state.key = self.key;
-        state.selected = min(state.selected, Some(self.menu.len().saturating_sub(1)));
+fn render_ref<'a>(widget: &MenuLine<'a>, area: Rect, buf: &mut Buffer, state: &mut MenuLineState) {
+    let mut row = area.y;
+    let mut col = area.x;
 
-        let select_style = if self.focused {
-            if let Some(focus_style) = self.focus_style {
-                focus_style
-            } else {
-                revert_style(self.style)
-            }
+    state.area = area;
+    state.areas.clear();
+    state.key.clear();
+    state.key.extend(widget.key.iter());
+    state.selected = min(state.selected, Some(widget.menu.len().saturating_sub(1)));
+
+    let select_style = if widget.focused {
+        if let Some(focus_style) = widget.focus_style {
+            focus_style
         } else {
-            if let Some(select_style) = self.select_style {
-                select_style
-            } else {
-                revert_style(self.style)
-            }
-        };
-        let title_style = if let Some(title_style) = self.title_style {
-            title_style
+            revert_style(widget.style)
+        }
+    } else {
+        if let Some(select_style) = widget.select_style {
+            select_style
         } else {
-            self.style.underlined()
-        };
+            revert_style(widget.style)
+        }
+    };
+    let title_style = if let Some(title_style) = widget.title_style {
+        title_style
+    } else {
+        widget.style.underlined()
+    };
 
-        buf.set_style(area, self.style);
+    buf.set_style(area, widget.style);
 
-        let mut text = Text::default();
-        let mut line = Line::default();
+    let mut text = Text::default();
+    let mut line = Line::default();
 
-        if !self.title.content.is_empty() {
-            let title_width = self.title.width() as u16;
+    if !widget.title.content.is_empty() {
+        let title_width = widget.title.width() as u16;
 
-            line.spans.push(self.title.style(title_style));
+        line.spans.push(widget.title.clone().style(title_style));
+        line.spans.push(" ".into());
+
+        col += title_width + 1;
+    }
+
+    'f: {
+        for (n, mut item) in widget.menu.iter().enumerate() {
+            let item_width = span_width(&item);
+
+            // line breaks
+            if col + item_width > area.x + area.width {
+                text.lines.push(line);
+
+                if row + 1 >= area.y + area.height {
+                    break 'f;
+                }
+
+                line = Line::default();
+
+                row += 1;
+                col = area.x;
+            }
+
+            state
+                .areas
+                .push(Rect::new(col, row, item_width, 1).intersection(area));
+
+            if state.selected == Some(n) {
+                for mut v in item.iter().cloned() {
+                    v.style = v.style.patch(select_style);
+                    line.spans.push(v);
+                }
+            } else {
+                line.spans.extend(item.iter().cloned());
+            }
             line.spans.push(" ".into());
 
-            col += title_width + 1;
+            col += item_width + 1;
         }
-
-        'f: {
-            for (n, mut item) in self.menu.into_iter().enumerate() {
-                let item_width = span_width(&item);
-
-                // line breaks
-                if col + item_width > area.x + area.width {
-                    text.lines.push(line);
-
-                    if row + 1 >= area.y + area.height {
-                        break 'f;
-                    }
-
-                    line = Line::default();
-
-                    row += 1;
-                    col = area.x;
-                }
-
-                if state.selected == Some(n) {
-                    for v in &mut item {
-                        v.style = v.style.patch(select_style)
-                    }
-                }
-
-                state
-                    .areas
-                    .push(Rect::new(col, row, item_width, 1).intersection(area));
-
-                line.spans.extend(item);
-                line.spans.push(" ".into());
-
-                col += item_width + 1;
-            }
-            // for-else
-            text.lines.push(line);
-        }
-
-        text.render(area, buf);
+        // for-else
+        text.lines.push(line);
     }
+
+    text.render(area, buf);
 }
 
 fn menu_span(txt: &str) -> (char, Vec<Span<'_>>) {

@@ -26,7 +26,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
-use ratatui::widgets::{Block, StatefulWidget, Widget};
+use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, Widget};
 use std::cmp::{max, min};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
@@ -147,90 +147,107 @@ impl<'a> TextInput<'a> {
     }
 }
 
+impl<'a> StatefulWidgetRef for TextInput<'a> {
+    type State = TextInputState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(&self, area, buf, state);
+    }
+}
+
 impl<'a> StatefulWidget for TextInput<'a> {
     type State = TextInputState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.area = area;
-        state.inner = self.block.inner_if_some(area);
-        state.value.set_width(state.inner.width as usize);
+        render_ref(&self, area, buf, state);
+    }
+}
 
-        self.block.render(area, buf);
+fn render_ref<'a>(
+    widget: &TextInput<'a>,
+    area: Rect,
+    buf: &mut Buffer,
+    state: &mut TextInputState,
+) {
+    state.area = area;
+    state.inner = widget.block.inner_if_some(area);
+    state.value.set_width(state.inner.width as usize);
 
-        let area = state.inner.intersection(buf.area);
+    widget.block.render(area, buf);
 
-        let focus_style = if let Some(focus_style) = self.focus_style {
-            focus_style
+    let area = state.inner.intersection(buf.area);
+
+    let focus_style = if let Some(focus_style) = widget.focus_style {
+        focus_style
+    } else {
+        widget.style
+    };
+    let select_style = if let Some(select_style) = widget.select_style {
+        select_style
+    } else {
+        Style::default().on_yellow()
+    };
+    let invalid_style = if let Some(invalid_style) = widget.invalid_style {
+        invalid_style
+    } else {
+        Style::default().red()
+    };
+
+    let (style, select_style) = if widget.focused {
+        if widget.invalid {
+            (
+                focus_style.patch(invalid_style),
+                select_style.patch(invalid_style),
+            )
         } else {
-            self.style
-        };
-        let select_style = if let Some(select_style) = self.select_style {
+            (focus_style, select_style)
+        }
+    } else {
+        if widget.invalid {
+            (
+                widget.style.patch(invalid_style),
+                widget.style.patch(invalid_style),
+            )
+        } else {
+            (widget.style, widget.style)
+        }
+    };
+
+    buf.set_style(area, style);
+
+    let selection = state.value.selection();
+    let ox = state.offset();
+    let mut cit = state.value.value().graphemes(true).skip(state.offset());
+    let mut col = 0;
+    let mut cx = 0;
+    loop {
+        if col >= area.width {
+            break;
+        }
+
+        let ch = if let Some(c) = cit.next() { c } else { " " };
+
+        let tx = cx + ox;
+        let style = if selection.contains(&tx) {
             select_style
         } else {
-            Style::default().on_yellow()
-        };
-        let invalid_style = if let Some(invalid_style) = self.invalid_style {
-            invalid_style
-        } else {
-            Style::default().red()
+            style
         };
 
-        let (style, select_style) = if self.focused {
-            if self.invalid {
-                (
-                    focus_style.patch(invalid_style),
-                    select_style.patch(invalid_style),
-                )
-            } else {
-                (focus_style, select_style)
-            }
-        } else {
-            if self.invalid {
-                (
-                    self.style.patch(invalid_style),
-                    self.style.patch(invalid_style),
-                )
-            } else {
-                (self.style, self.style)
-            }
-        };
+        let cell = buf.get_mut(area.x + col, area.y);
+        cell.set_symbol(ch);
+        cell.set_style(style);
 
-        buf.set_style(area, style);
-
-        let selection = state.value.selection();
-        let ox = state.offset();
-        let mut cit = state.value.value().graphemes(true).skip(state.offset());
-        let mut col = 0;
-        let mut cx = 0;
-        loop {
-            if col >= area.width {
-                break;
-            }
-
-            let ch = if let Some(c) = cit.next() { c } else { " " };
-
-            let tx = cx + ox;
-            let style = if selection.contains(&tx) {
-                select_style
-            } else {
-                style
-            };
-
-            let cell = buf.get_mut(area.x + col, area.y);
-            cell.set_symbol(ch);
+        // extra cells for wide chars.
+        let ww = unicode_display_width::width(ch) as u16;
+        for x in 1..ww {
+            let cell = buf.get_mut(area.x + col + x, area.y);
+            cell.set_symbol("");
             cell.set_style(style);
-
-            // extra cells for wide chars.
-            let ww = unicode_display_width::width(ch) as u16;
-            for x in 1..ww {
-                let cell = buf.get_mut(area.x + col + x, area.y);
-                cell.set_symbol("");
-                cell.set_style(style);
-            }
-
-            col += max(ww, 1);
-            cx += 1;
         }
+
+        col += max(ww, 1);
+        cx += 1;
     }
 }
 

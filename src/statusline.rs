@@ -7,7 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::Span;
-use ratatui::widgets::{StatefulWidget, Widget};
+use ratatui::widgets::{StatefulWidget, StatefulWidgetRef, Widget};
 use std::fmt::Debug;
 
 /// Basic status line with multiple sections.
@@ -85,20 +85,32 @@ impl StatusLineState {
     }
 }
 
+impl StatefulWidgetRef for StatusLine {
+    type State = StatusLineState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(self, area, buf, state);
+    }
+}
+
 impl StatefulWidget for StatusLine {
     type State = StatusLineState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.area = area;
+        render_ref(&self, area, buf, state);
+    }
+}
 
-        let layout = Layout::horizontal(self.widths).split(state.area);
+fn render_ref(widget: &StatusLine, area: Rect, buf: &mut Buffer, state: &mut StatusLineState) {
+    state.area = area;
 
-        for (i, rect) in layout.iter().enumerate() {
-            let style = self.style.get(i).copied().unwrap_or_default();
-            let txt = state.status.get(i).map(|v| v.as_str()).unwrap_or("");
+    let layout = Layout::horizontal(widget.widths.iter()).split(state.area);
 
-            buf.set_style(*rect, style);
-            Span::from(txt).render(*rect, buf);
-        }
+    for (i, rect) in layout.iter().enumerate() {
+        let style = widget.style.get(i).copied().unwrap_or_default();
+        let txt = state.status.get(i).map(|v| v.as_str()).unwrap_or("");
+
+        buf.set_style(*rect, style);
+        Span::from(txt).render(*rect, buf);
     }
 }

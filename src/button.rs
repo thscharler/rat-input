@@ -9,7 +9,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, StatefulWidget, Widget};
+use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, Widget, WidgetRef};
 
 /// Button widget.
 #[derive(Debug, Default, Clone)]
@@ -174,45 +174,57 @@ impl<'a> From<Line<'a>> for Button<'a> {
     }
 }
 
+impl<'a> StatefulWidgetRef for Button<'a> {
+    type State = ButtonState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(self, area, buf, state);
+    }
+}
+
 impl<'a> StatefulWidget for Button<'a> {
     type State = ButtonState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.area = area;
-        state.inner_area = self.block.inner_if_some(area);
-
-        self.block.render(area, buf);
-
-        let focus_style = if let Some(focus_style) = self.focus_style {
-            focus_style
-        } else {
-            self.style
-        };
-        let armed_style = if let Some(armed_style) = self.armed_style {
-            armed_style
-        } else {
-            self.style.reversed()
-        };
-
-        if state.armed {
-            buf.set_style(state.inner_area, armed_style);
-        } else {
-            if self.focused {
-                buf.set_style(state.inner_area, focus_style);
-            } else {
-                buf.set_style(state.inner_area, self.style);
-            }
-        }
-
-        let layout = Layout::vertical([
-            Constraint::Fill(1),
-            Constraint::Length(self.text.height() as u16),
-            Constraint::Fill(1),
-        ])
-        .split(state.inner_area);
-
-        self.text.render(layout[1], buf);
+        render_ref(&self, area, buf, state);
     }
+}
+
+fn render_ref<'a>(widget: &Button<'a>, area: Rect, buf: &mut Buffer, state: &mut ButtonState) {
+    state.area = area;
+    state.inner_area = widget.block.inner_if_some(area);
+
+    widget.block.render_ref(area, buf);
+
+    let focus_style = if let Some(focus_style) = widget.focus_style {
+        focus_style
+    } else {
+        widget.style
+    };
+    let armed_style = if let Some(armed_style) = widget.armed_style {
+        armed_style
+    } else {
+        widget.style.reversed()
+    };
+
+    if state.armed {
+        buf.set_style(state.inner_area, armed_style);
+    } else {
+        if widget.focused {
+            buf.set_style(state.inner_area, focus_style);
+        } else {
+            buf.set_style(state.inner_area, widget.style);
+        }
+    }
+
+    let layout = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(widget.text.height() as u16),
+        Constraint::Fill(1),
+    ])
+    .split(state.inner_area);
+
+    widget.text.render_ref(layout[1], buf);
 }
 
 impl Default for ButtonState {

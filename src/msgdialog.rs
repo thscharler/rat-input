@@ -10,7 +10,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Flex, Margin, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Text};
-use ratatui::widgets::{Block, Paragraph, StatefulWidget, Widget};
+use ratatui::widgets::{Block, Paragraph, StatefulWidget, StatefulWidgetRef, Widget};
 use std::fmt::Debug;
 
 /// Basic status dialog for longer messages.
@@ -111,47 +111,61 @@ impl Default for MsgDialogState {
     }
 }
 
+impl StatefulWidgetRef for MsgDialog {
+    type State = MsgDialogState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(self, area, buf, state);
+    }
+}
+
 impl StatefulWidget for MsgDialog {
     type State = MsgDialogState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        if state.active {
-            let l_dlg = layout_dialog(
-                area,
-                Constraint::Percentage(61),
-                Constraint::Percentage(61),
-                Margin::new(1, 1),
-                [Constraint::Length(10)],
-                0,
-                Flex::End,
-            );
+        render_ref(&self, area, buf, state);
+    }
+}
 
-            state.area = l_dlg.area;
+fn render_ref(widget: &MsgDialog, area: Rect, buf: &mut Buffer, state: &mut MsgDialogState) {
+    if state.active {
+        let l_dlg = layout_dialog(
+            area,
+            Constraint::Percentage(61),
+            Constraint::Percentage(61),
+            Margin::new(1, 1),
+            [Constraint::Length(10)],
+            0,
+            Flex::End,
+        );
 
-            //
-            let block = Block::default().style(self.style);
+        state.area = l_dlg.area;
 
-            let mut lines = Vec::new();
-            for t in state.message.split('\n') {
-                lines.push(Line::from(t));
-            }
-            let text = Text::from(lines).alignment(Alignment::Center);
-            let para = Paragraph::new(text);
+        //
+        let block = Block::default().style(widget.style);
 
-            let ok = Button::from("Ok").styles(self.button_style).focused(true);
-
-            for y in l_dlg.dialog.y..l_dlg.dialog.bottom() {
-                let idx = buf.index_of(l_dlg.dialog.x, y);
-                for x in 0..l_dlg.dialog.width as usize {
-                    buf.content[idx + x].reset();
-                    buf.content[idx + x].set_style(self.style);
-                }
-            }
-
-            block.render(l_dlg.dialog, buf);
-            para.render(l_dlg.area, buf);
-            ok.render(l_dlg.buttons[0], buf, &mut state.button);
+        let mut lines = Vec::new();
+        for t in state.message.split('\n') {
+            lines.push(Line::from(t));
         }
+        let text = Text::from(lines).alignment(Alignment::Center);
+        let para = Paragraph::new(text);
+
+        let ok = Button::from("Ok")
+            .styles(widget.button_style.clone())
+            .focused(true);
+
+        for y in l_dlg.dialog.y..l_dlg.dialog.bottom() {
+            let idx = buf.index_of(l_dlg.dialog.x, y);
+            for x in 0..l_dlg.dialog.width as usize {
+                buf.content[idx + x].reset();
+                buf.content[idx + x].set_style(widget.style);
+            }
+        }
+
+        block.render(l_dlg.dialog, buf);
+        para.render(l_dlg.area, buf);
+        ok.render(l_dlg.buttons[0], buf, &mut state.button);
     }
 }
 

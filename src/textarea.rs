@@ -13,7 +13,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{BlockExt, Stylize};
 use ratatui::style::Style;
-use ratatui::widgets::{Block, StatefulWidget, Widget};
+use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, Widget};
 use ropey::{Rope, RopeSlice};
 use std::cmp::{max, min};
 
@@ -143,104 +143,116 @@ impl<'a> TextArea<'a> {
     }
 }
 
+impl<'a> StatefulWidgetRef for TextArea<'a> {
+    type State = TextAreaState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(self, area, buf, state);
+    }
+}
+
 impl<'a> StatefulWidget for TextArea<'a> {
     type State = TextAreaState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.area = area;
-        state.inner = self.block.inner_if_some(area);
+        render_ref(&self, area, buf, state);
+    }
+}
 
-        self.block.render(area, buf);
+fn render_ref<'a>(widget: &TextArea<'a>, area: Rect, buf: &mut Buffer, state: &mut TextAreaState) {
+    state.area = area;
+    state.inner = widget.block.inner_if_some(area);
 
-        let area = state.area.intersection(buf.area);
+    widget.block.render(area, buf);
 
-        let focus_style = if let Some(focus_style) = self.focus_style {
-            focus_style
-        } else {
-            self.style
-        };
-        let select_style = if let Some(select_style) = self.select_style {
-            select_style
-        } else {
-            Style::default().on_yellow()
-        };
-        let style = if self.focused {
-            focus_style
-        } else {
-            self.style
-        };
+    let area = state.area.intersection(buf.area);
 
-        buf.set_style(area, style);
+    let focus_style = if let Some(focus_style) = widget.focus_style {
+        focus_style
+    } else {
+        widget.style
+    };
+    let select_style = if let Some(select_style) = widget.select_style {
+        select_style
+    } else {
+        Style::default().on_yellow()
+    };
+    let style = if widget.focused {
+        focus_style
+    } else {
+        widget.style
+    };
 
-        let selection = state.selection();
-        let mut styles = Vec::new();
+    buf.set_style(area, style);
 
-        let mut line_iter = state.value.iter_scrolled();
-        for row in 0..area.height {
-            if let Some(mut line) = line_iter.next() {
-                let mut col = 0;
-                let mut cx = 0;
-                loop {
-                    if col >= area.width {
-                        break;
-                    }
+    let selection = state.selection();
+    let mut styles = Vec::new();
 
-                    let tmp_str;
-                    let ch = if let Some(ch) = line.next() {
-                        if let Some(ch) = ch.as_str() {
-                            // would do a newline on the console.
-                            if ch != "\n" {
-                                ch
-                            } else {
-                                " "
-                            }
+    let mut line_iter = state.value.iter_scrolled();
+    for row in 0..area.height {
+        if let Some(mut line) = line_iter.next() {
+            let mut col = 0;
+            let mut cx = 0;
+            loop {
+                if col >= area.width {
+                    break;
+                }
+
+                let tmp_str;
+                let ch = if let Some(ch) = line.next() {
+                    if let Some(ch) = ch.as_str() {
+                        // would do a newline on the console.
+                        if ch != "\n" {
+                            ch
                         } else {
-                            tmp_str = ch.to_string();
-                            tmp_str.as_str()
+                            " "
                         }
                     } else {
-                        " "
-                    };
-
-                    // text based
-                    let (ox, oy) = state.offset();
-                    let tx = cx as usize + ox;
-                    let ty = row as usize + oy;
-
-                    let mut style = style;
-                    // text-styles
-                    state.styles_at((tx, ty), &mut styles);
-                    for idx in styles.iter().copied() {
-                        let Some(s) = self.text_style.get(idx) else {
-                            panic!("invalid style nr: {}", idx);
-                        };
-                        style = style.patch(*s);
+                        tmp_str = ch.to_string();
+                        tmp_str.as_str()
                     }
-                    // selection
-                    if selection.contains((tx, ty)) {
-                        style = style.patch(select_style);
+                } else {
+                    " "
+                };
+
+                // text based
+                let (ox, oy) = state.offset();
+                let tx = cx as usize + ox;
+                let ty = row as usize + oy;
+
+                let mut style = style;
+                // text-styles
+                state.styles_at((tx, ty), &mut styles);
+                for idx in styles.iter().copied() {
+                    let Some(s) = widget.text_style.get(idx) else {
+                        panic!("invalid style nr: {}", idx);
                     };
-
-                    let cell = buf.get_mut(area.x + col, area.y + row);
-                    cell.set_symbol(ch);
-                    cell.set_style(style);
-
-                    // extra cells for wide chars.
-                    let ww = unicode_display_width::width(ch) as u16;
-                    for x in 1..ww {
-                        let cell = buf.get_mut(area.x + col + x, area.y + row);
-                        cell.set_symbol(" ");
-                        cell.set_style(style);
-                    }
-
-                    col += max(ww, 1);
-                    cx += 1;
+                    style = style.patch(*s);
                 }
-            } else {
-                for col in 0..area.width {
-                    let cell = buf.get_mut(area.x + col, area.y + row);
+                // selection
+                if selection.contains((tx, ty)) {
+                    style = style.patch(select_style);
+                };
+
+                let cell = buf.get_mut(area.x + col, area.y + row);
+                cell.set_symbol(ch);
+                cell.set_style(style);
+
+                // extra cells for wide chars.
+                let ww = unicode_display_width::width(ch) as u16;
+                for x in 1..ww {
+                    let cell = buf.get_mut(area.x + col + x, area.y + row);
                     cell.set_symbol(" ");
+                    cell.set_style(style);
                 }
+
+                col += max(ww, 1);
+                cx += 1;
+            }
+        } else {
+            for col in 0..area.width {
+                let cell = buf.get_mut(area.x + col, area.y + row);
+                cell.set_symbol(" ");
             }
         }
     }

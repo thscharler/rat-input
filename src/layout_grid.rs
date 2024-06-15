@@ -5,11 +5,11 @@ use ratatui::layout::{Layout, Rect};
 ///
 /// ```
 /// use ratatui::layout::{Constraint, Layout, Rect};
-/// use rat_input::layout_grid::grid;
+/// use rat_input::layout_grid::layout_grid;
 ///
 /// let area = Rect::new(0,0,100,100);
 ///
-/// let layout = grid::<3, 5>(area,
+/// let layout = layout_grid::<3, 5>(area,
 ///             Layout::horizontal([
 ///                 Constraint::Length(5),
 ///                 Constraint::Fill(1),

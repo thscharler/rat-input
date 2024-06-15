@@ -9,7 +9,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{StatefulWidget, Widget};
+use ratatui::widgets::{StatefulWidget, StatefulWidgetRef, Widget};
 use std::fmt::{Debug, Formatter};
 
 /// Renders a month.
@@ -190,54 +190,94 @@ impl Month {
     }
 }
 
+impl StatefulWidgetRef for Month {
+    type State = MonthState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(self, area, buf, state);
+    }
+}
+
 impl StatefulWidget for Month {
     type State = MonthState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let mut day = self.start_date;
-        let month = self.start_date.month();
+        render_ref(&self, area, buf, state);
+    }
+}
 
-        state.area = area;
+fn render_ref(widget: &Month, area: Rect, buf: &mut Buffer, state: &mut MonthState) {
+    let mut day = widget.start_date;
+    let month = widget.start_date.month();
 
-        let mut w = 0;
-        let mut x = area.x;
-        let mut y = area.y;
+    state.area = area;
 
-        let day_style = self.day_style.as_ref();
+    let mut w = 0;
+    let mut x = area.x;
+    let mut y = area.y;
 
-        let mut w_month = Text::default();
+    let day_style = widget.day_style.as_ref();
 
-        let w_title = Line::styled(
-            day.format_localized("%B", self.loc).to_string(),
-            self.title_style,
-        );
-        state.area_month = Rect::new(x, y, w_title.width() as u16, 1);
-        w_month.lines.push(w_title);
-        y += 1;
+    let mut w_month = Text::default();
 
-        // first line may omit a few days
+    let w_title = Line::styled(
+        day.format_localized("%B", widget.loc).to_string(),
+        widget.title_style,
+    );
+    state.area_month = Rect::new(x, y, w_title.width() as u16, 1);
+    w_month.lines.push(w_title);
+    y += 1;
+
+    // first line may omit a few days
+    let mut w_week = Line::default();
+    let w_weeknum =
+        Span::from(day.format_localized("%U", widget.loc).to_string()).style(widget.week_style);
+    state.weeks[w] = Rect::new(x, y, w_weeknum.width() as u16, 1);
+    w_week.spans.push(w_weeknum);
+    w_week.spans.push(" ".into());
+    x += 3;
+
+    for wd in [
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+        Weekday::Fri,
+        Weekday::Sat,
+        Weekday::Sun,
+    ] {
+        if day.weekday() != wd {
+            w_week.spans.push("   ".into());
+            x += 3;
+        } else {
+            let w_date = Span::from(day.format_localized("%e", widget.loc).to_string())
+                .style(day_style(day));
+            state.area_days[day.day0() as usize] = Rect::new(x, y, w_date.width() as u16, 1);
+            w_week.spans.push(w_date);
+            w_week.spans.push(" ".into());
+            x += 3;
+
+            day += chrono::Duration::try_days(1).expect("days");
+        }
+    }
+    w_month.lines.push(w_week);
+
+    y += 1;
+    x = area.x;
+    w += 1;
+
+    while month == day.month() {
         let mut w_week = Line::default();
         let w_weeknum =
-            Span::from(day.format_localized("%U", self.loc).to_string()).style(self.week_style);
+            Span::from(day.format_localized("%U", widget.loc).to_string()).style(widget.week_style);
         state.weeks[w] = Rect::new(x, y, w_weeknum.width() as u16, 1);
         w_week.spans.push(w_weeknum);
         w_week.spans.push(" ".into());
         x += 3;
 
-        for wd in [
-            Weekday::Mon,
-            Weekday::Tue,
-            Weekday::Wed,
-            Weekday::Thu,
-            Weekday::Fri,
-            Weekday::Sat,
-            Weekday::Sun,
-        ] {
-            if day.weekday() != wd {
-                w_week.spans.push("   ".into());
-                x += 3;
-            } else {
-                let w_date = Span::from(day.format_localized("%e", self.loc).to_string())
+        for _ in 0..7 {
+            if day.month() == month {
+                let w_date = Span::from(day.format_localized("%e", widget.loc).to_string())
                     .style(day_style(day));
                 state.area_days[day.day0() as usize] = Rect::new(x, y, w_date.width() as u16, 1);
                 w_week.spans.push(w_date);
@@ -245,6 +285,9 @@ impl StatefulWidget for Month {
                 x += 3;
 
                 day += chrono::Duration::try_days(1).expect("days");
+            } else {
+                w_week.spans.push("   ".into());
+                x += 3;
             }
         }
         w_month.lines.push(w_week);
@@ -252,39 +295,7 @@ impl StatefulWidget for Month {
         y += 1;
         x = area.x;
         w += 1;
-
-        while month == day.month() {
-            let mut w_week = Line::default();
-            let w_weeknum =
-                Span::from(day.format_localized("%U", self.loc).to_string()).style(self.week_style);
-            state.weeks[w] = Rect::new(x, y, w_weeknum.width() as u16, 1);
-            w_week.spans.push(w_weeknum);
-            w_week.spans.push(" ".into());
-            x += 3;
-
-            for _ in 0..7 {
-                if day.month() == month {
-                    let w_date = Span::from(day.format_localized("%e", self.loc).to_string())
-                        .style(day_style(day));
-                    state.area_days[day.day0() as usize] =
-                        Rect::new(x, y, w_date.width() as u16, 1);
-                    w_week.spans.push(w_date);
-                    w_week.spans.push(" ".into());
-                    x += 3;
-
-                    day += chrono::Duration::try_days(1).expect("days");
-                } else {
-                    w_week.spans.push("   ".into());
-                    x += 3;
-                }
-            }
-            w_month.lines.push(w_week);
-
-            y += 1;
-            x = area.x;
-            w += 1;
-        }
-
-        w_month.render(area, buf);
     }
+
+    w_month.render(area, buf);
 }

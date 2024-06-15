@@ -7,7 +7,7 @@ use rat_event::{FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::Style;
-use ratatui::widgets::{Block, StatefulWidget};
+use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef};
 use std::fmt::{Debug, Display, LowerExp};
 use std::ops::Range;
 use std::str::FromStr;
@@ -106,6 +106,14 @@ impl<'a> NumberInput<'a> {
     pub fn invalid(mut self, invalid: bool) -> Self {
         self.widget = self.widget.invalid(invalid);
         self
+    }
+}
+
+impl<'a> StatefulWidgetRef for NumberInput<'a> {
+    type State = NumberInputState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.widget.render_ref(area, buf, &mut state.widget);
     }
 }
 
