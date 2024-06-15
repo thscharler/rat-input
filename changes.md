@@ -1,3 +1,7 @@
+# 0.16.5
+
+* refactor: moved focus and invalid from the widget to the state.
+  when using StatefulWidgetRef this was the wrong place.
 * impl StatefulWidgetRef
 * DateInput, NumberInput: add all functions from the underlying MaskedInput.
 
