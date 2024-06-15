@@ -79,6 +79,7 @@ use format_num_pattern::NumberSymbols;
 use log::debug;
 use rat_event::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
+use rat_focus::FocusFlag;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::BlockExt;
@@ -98,8 +99,6 @@ pub struct MaskedInput<'a> {
     focus_style: Option<Style>,
     select_style: Option<Style>,
     invalid_style: Option<Style>,
-    focused: bool,
-    invalid: bool,
 }
 
 /// Combined style.
@@ -115,6 +114,11 @@ pub struct MaskedInputStyle {
 /// State of the input-mask.
 #[derive(Debug, Clone)]
 pub struct MaskedInputState {
+    /// Current focus state.
+    pub focus: FocusFlag,
+    /// Display as invalid.
+    pub invalid: bool,
+
     /// Area with block
     pub area: Rect,
     /// Area
@@ -197,25 +201,6 @@ impl<'a> MaskedInput<'a> {
         self.block = Some(block);
         self
     }
-
-    /// Renders the content differently if focused.
-    ///
-    /// * Selection is only shown if focused.
-    /// * May use a compact form if not focused.
-    ///
-    #[inline]
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.focused = focused;
-        self
-    }
-
-    /// Renders the content differently if invalid.
-    /// Uses the invalid style instead of the base style for rendering.
-    #[inline]
-    pub fn invalid(mut self, invalid: bool) -> Self {
-        self.invalid = invalid;
-        self
-    }
 }
 
 impl<'a> StatefulWidgetRef for MaskedInput<'a> {
@@ -248,7 +233,7 @@ fn render_ref<'a>(
 
     let area = state.inner.intersection(buf.area);
 
-    if widget.focused {
+    if state.focus.get() {
         state.value.render_value();
     } else {
         if widget.show_compact {
@@ -274,8 +259,8 @@ fn render_ref<'a>(
         Style::default().red()
     };
 
-    let (style, select_style) = if widget.focused {
-        if widget.invalid {
+    let (style, select_style) = if state.focus.get() {
+        if state.invalid {
             (
                 focus_style.patch(invalid_style),
                 select_style.patch(invalid_style),
@@ -284,7 +269,7 @@ fn render_ref<'a>(
             (focus_style, select_style)
         }
     } else {
-        if widget.invalid {
+        if state.invalid {
             (
                 widget.style.patch(invalid_style),
                 widget.style.patch(invalid_style),
@@ -333,6 +318,8 @@ fn render_ref<'a>(
 impl Default for MaskedInputState {
     fn default() -> Self {
         Self {
+            focus: Default::default(),
+            invalid: false,
             area: Default::default(),
             inner: Default::default(),
             mouse: Default::default(),
@@ -354,6 +341,34 @@ impl MaskedInputState {
             value: InputMaskCore::new_with_symbols(sym),
             ..Self::default()
         }
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn set_focused(&mut self, focus: bool) {
+        self.focus.focus.set(focus);
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn is_focused(&mut self) -> bool {
+        self.focus.focus.get()
+    }
+
+    /// Renders the widget in invalid style.
+    #[inline]
+    pub fn set_invalid(&mut self, invalid: bool) {
+        self.invalid = invalid;
+    }
+
+    /// Renders the widget in invalid style.
+    #[inline]
+    pub fn get_invalid(&self) -> bool {
+        self.invalid
     }
 
     /// Reset to empty.

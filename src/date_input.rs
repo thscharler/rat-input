@@ -93,24 +93,6 @@ impl<'a> DateInput<'a> {
         self.widget = self.widget.block(block);
         self
     }
-
-    /// Renders the content differently if focused.
-    ///
-    /// * Selection is only shown if focused.
-    ///
-    #[inline]
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.widget = self.widget.focused(focused);
-        self
-    }
-
-    /// Renders the content differently if invalid.
-    /// Uses the invalid style instead of the base style for rendering.
-    #[inline]
-    pub fn invalid(mut self, invalid: bool) -> Self {
-        self.widget = self.widget.invalid(invalid);
-        self
-    }
 }
 
 impl<'a> StatefulWidgetRef for DateInput<'a> {
@@ -289,6 +271,34 @@ impl DateInputState {
         self.pattern = pattern.as_ref().to_string();
         self.widget.set_mask(mask)?;
         Ok(())
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn set_focused(&mut self, focus: bool) {
+        self.widget.focus.focus.set(focus);
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn is_focused(&mut self) -> bool {
+        self.widget.focus.focus.get()
+    }
+
+    /// Renders the widget in invalid style.
+    #[inline]
+    pub fn set_invalid(&mut self, invalid: bool) {
+        self.widget.invalid = invalid;
+    }
+
+    /// Renders the widget in invalid style.
+    #[inline]
+    pub fn get_invalid(&self) -> bool {
+        self.widget.invalid
     }
 
     /// Reset to empty.

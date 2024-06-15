@@ -9,6 +9,7 @@ use crossterm::event::KeyModifiers;
 use log::debug;
 use rat_event::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
+use rat_focus::FocusFlag;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{BlockExt, Stylize};
@@ -59,7 +60,6 @@ pub struct TextArea<'a> {
     focus_style: Option<Style>,
     select_style: Option<Style>,
     text_style: Vec<Style>,
-    focused: bool,
 }
 
 /// Combined style for the widget.
@@ -75,6 +75,8 @@ pub struct TextAreaStyle {
 ///
 #[derive(Debug, Clone)]
 pub struct TextAreaState {
+    /// Current focus state.
+    pub focus: FocusFlag,
     /// Complete area.
     pub area: Rect,
     /// Area inside the borders.
@@ -134,13 +136,6 @@ impl<'a> TextArea<'a> {
         self.block = Some(block);
         self
     }
-
-    /// Renders the selection differently if focused.
-    #[inline]
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.focused = focused;
-        self
-    }
 }
 
 impl<'a> StatefulWidgetRef for TextArea<'a> {
@@ -177,7 +172,7 @@ fn render_ref<'a>(widget: &TextArea<'a>, area: Rect, buf: &mut Buffer, state: &m
     } else {
         Style::default().on_yellow()
     };
-    let style = if widget.focused {
+    let style = if state.focus.get() {
         focus_style
     } else {
         widget.style
@@ -261,6 +256,7 @@ fn render_ref<'a>(widget: &TextArea<'a>, area: Rect, buf: &mut Buffer, state: &m
 impl Default for TextAreaState {
     fn default() -> Self {
         Self {
+            focus: Default::default(),
             area: Default::default(),
             inner: Default::default(),
             mouse: Default::default(),
@@ -275,6 +271,22 @@ impl TextAreaState {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn set_focused(&mut self, focus: bool) {
+        self.focus.focus.set(focus);
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn is_focused(&mut self) -> bool {
+        self.focus.focus.get()
     }
 
     /// Clear everything.

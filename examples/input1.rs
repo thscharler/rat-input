@@ -168,9 +168,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
     ])
     .split(l0[0]);
 
-    let input1 = TextInput::default()
-        .focused(true)
-        .style(Style::default().black().on_dark_gray());
+    let input1 = TextInput::default().style(Style::default().black().on_dark_gray());
     frame.render_stateful_widget(input1, l1[1], &mut state.input);
     if let Some((x, y)) = state.input.screen_cursor() {
         frame.set_cursor(x, y);

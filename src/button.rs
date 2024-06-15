@@ -4,12 +4,13 @@
 
 use crate::_private::NonExhaustive;
 use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
+use rat_focus::FocusFlag;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::BlockExt;
 use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, Widget, WidgetRef};
+use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, WidgetRef};
 
 /// Button widget.
 #[derive(Debug, Default, Clone)]
@@ -19,7 +20,6 @@ pub struct Button<'a> {
     focus_style: Option<Style>,
     armed_style: Option<Style>,
     block: Option<Block<'a>>,
-    focused: bool,
 }
 
 /// Composite style.
@@ -34,6 +34,8 @@ pub struct ButtonStyle {
 /// State data & event-handling.
 #[derive(Debug, Clone)]
 pub struct ButtonState {
+    /// Current focus state.
+    pub focus: FocusFlag,
     /// Complete area
     pub area: Rect,
     /// Inner area.
@@ -102,12 +104,6 @@ impl<'a> Button<'a> {
     #[inline]
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
-        self
-    }
-
-    /// Renders the button differently if focused.
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.focused = focused;
         self
     }
 }
@@ -210,7 +206,7 @@ fn render_ref<'a>(widget: &Button<'a>, area: Rect, buf: &mut Buffer, state: &mut
     if state.armed {
         buf.set_style(state.inner_area, armed_style);
     } else {
-        if widget.focused {
+        if state.focus.get() {
             buf.set_style(state.inner_area, focus_style);
         } else {
             buf.set_style(state.inner_area, widget.style);
@@ -227,9 +223,38 @@ fn render_ref<'a>(widget: &Button<'a>, area: Rect, buf: &mut Buffer, state: &mut
     widget.text.render_ref(layout[1], buf);
 }
 
+impl ButtonState {
+    pub fn new() -> Self {
+        Self {
+            focus: Default::default(),
+            area: Default::default(),
+            inner_area: Default::default(),
+            armed: false,
+            non_exhaustive: NonExhaustive,
+        }
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn set_focused(&mut self, focus: bool) {
+        self.focus.focus.set(focus);
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn is_focused(&mut self) -> bool {
+        self.focus.focus.get()
+    }
+}
+
 impl Default for ButtonState {
     fn default() -> Self {
         Self {
+            focus: Default::default(),
             area: Default::default(),
             inner_area: Default::default(),
             armed: false,

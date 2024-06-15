@@ -35,6 +35,7 @@ fn main() -> Result<(), anyhow::Error> {
         menu: Default::default(),
         status: Default::default(),
     };
+    state.menu.focus.set();
     insert_text_1(&mut state);
 
     run_ui(&mut data, &mut state)
@@ -303,8 +304,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
         .add("Lorem")
         .add("_Quit")
         .title_style(Style::default().black().on_yellow())
-        .style(Style::default().black().on_dark_gray())
-        .focused(true);
+        .style(Style::default().black().on_dark_gray());
     frame.render_stateful_widget(menu1, l1[2], &mut state.menu);
 }
 

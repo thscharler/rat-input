@@ -9,6 +9,7 @@ use crate::util::{next_opt, prev_opt, revert_style, span_width};
 use log::debug;
 use rat_event::util::MouseFlags;
 use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
+use rat_focus::FocusFlag;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style, Stylize};
@@ -30,7 +31,6 @@ pub struct MenuLine<'a> {
     title: Span<'a>,
     key: Vec<char>,
     menu: Vec<Vec<Span<'a>>>,
-    focused: bool,
 }
 
 /// Combined styles.
@@ -48,6 +48,8 @@ pub struct MenuStyle {
 ///
 #[derive(Debug, Clone)]
 pub struct MenuLineState {
+    /// Current focus state.
+    pub focus: FocusFlag,
     /// Focus
     pub area: Rect,
     /// Areas for each item.
@@ -114,13 +116,6 @@ impl<'a> MenuLine<'a> {
         self
     }
 
-    /// Renders the content differently if focused.
-    #[inline]
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.focused = focused;
-        self
-    }
-
     /// Add item.
     #[inline]
     #[allow(clippy::should_implement_trait)]
@@ -158,7 +153,7 @@ fn render_ref<'a>(widget: &MenuLine<'a>, area: Rect, buf: &mut Buffer, state: &m
     state.key.extend(widget.key.iter());
     state.selected = min(state.selected, Some(widget.menu.len().saturating_sub(1)));
 
-    let select_style = if widget.focused {
+    let select_style = if state.focus.get() {
         if let Some(focus_style) = widget.focus_style {
             focus_style
         } else {
@@ -192,7 +187,7 @@ fn render_ref<'a>(widget: &MenuLine<'a>, area: Rect, buf: &mut Buffer, state: &m
     }
 
     'f: {
-        for (n, mut item) in widget.menu.iter().enumerate() {
+        for (n, item) in widget.menu.iter().enumerate() {
             let item_width = span_width(&item);
 
             // line breaks
@@ -281,6 +276,22 @@ impl MenuLineState {
         Self::default()
     }
 
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn set_focused(&mut self, focus: bool) {
+        self.focus.focus.set(focus);
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn is_focused(&mut self) -> bool {
+        self.focus.focus.get()
+    }
+
     /// Number of items.
     #[inline]
     pub fn len(&self) -> usize {
@@ -346,6 +357,7 @@ impl MenuLineState {
 impl Default for MenuLineState {
     fn default() -> Self {
         Self {
+            focus: Default::default(),
             key: Default::default(),
             mouse: Default::default(),
             selected: Default::default(),
