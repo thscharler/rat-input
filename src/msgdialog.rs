@@ -101,13 +101,15 @@ impl MsgDialogState {
 
 impl Default for MsgDialogState {
     fn default() -> Self {
-        Self {
+        let s = Self {
             active: false,
             area: Default::default(),
             message: Default::default(),
             button: Default::default(),
             non_exhaustive: NonExhaustive,
-        }
+        };
+        s.button.focus.set();
+        s
     }
 }
 
@@ -151,9 +153,7 @@ fn render_ref(widget: &MsgDialog, area: Rect, buf: &mut Buffer, state: &mut MsgD
         let text = Text::from(lines).alignment(Alignment::Center);
         let para = Paragraph::new(text);
 
-        let ok = Button::from("Ok")
-            .styles(widget.button_style.clone())
-            .focused(true);
+        let ok = Button::from("Ok").styles(widget.button_style.clone());
 
         for y in l_dlg.dialog.y..l_dlg.dialog.bottom() {
             let idx = buf.index_of(l_dlg.dialog.x, y);

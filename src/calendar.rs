@@ -5,6 +5,7 @@
 
 use crate::_private::NonExhaustive;
 use chrono::{Datelike, NaiveDate, Weekday};
+use rat_focus::FocusFlag;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -37,6 +38,8 @@ pub struct MonthStyle {
 /// Month state.
 #[derive(Debug, Clone)]
 pub struct MonthState {
+    /// Current focus state.
+    pub focus: FocusFlag,
     /// Total area.
     pub area: Rect,
     /// Area for the month name.
@@ -60,9 +63,39 @@ impl Default for MonthStyle {
     }
 }
 
+impl MonthState {
+    pub fn new() -> Self {
+        Self {
+            focus: Default::default(),
+            area: Default::default(),
+            area_month: Default::default(),
+            area_days: [Rect::default(); 31],
+            weeks: [Rect::default(); 6],
+            non_exhaustive: NonExhaustive,
+        }
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn set_focused(&mut self, focus: bool) {
+        self.focus.focus.set(focus);
+    }
+
+    /// Renders the widget in focused style.
+    ///
+    /// This flag is not used for event-handling.
+    #[inline]
+    pub fn is_focused(&mut self) -> bool {
+        self.focus.focus.get()
+    }
+}
+
 impl Default for MonthState {
     fn default() -> Self {
         Self {
+            focus: Default::default(),
             area: Default::default(),
             area_month: Default::default(),
             area_days: [Rect::default(); 31],
