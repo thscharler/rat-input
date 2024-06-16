@@ -89,6 +89,17 @@ pub struct TextAreaState {
     pub non_exhaustive: NonExhaustive,
 }
 
+impl Default for TextAreaStyle {
+    fn default() -> Self {
+        Self {
+            style: Default::default(),
+            focus: None,
+            select: None,
+            non_exhaustive: NonExhaustive,
+        }
+    }
+}
+
 impl<'a> TextArea<'a> {
     /// New widget.
     pub fn new() -> Self {
@@ -172,10 +183,11 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
     } else {
         Style::default().on_yellow()
     };
-    let style = if state.focus.get() {
-        focus_style
+
+    let (style, select_style) = if state.focus.get() {
+        (widget.style, focus_style)
     } else {
-        widget.style
+        (widget.style, select_style)
     };
 
     buf.set_style(area, style);
@@ -196,8 +208,9 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
                 let tmp_str;
                 let ch = if let Some(ch) = line.next() {
                     if let Some(ch) = ch.as_str() {
-                        // would do a newline on the console.
-                        if ch != "\n" {
+                        // filter control characters
+                        let c0 = ch.chars().next();
+                        if c0 >= Some('\x20') {
                             ch
                         } else {
                             " "

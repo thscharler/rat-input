@@ -193,7 +193,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
     .split(area);
 
     let l2 = Layout::horizontal([
-        Constraint::Length(1),
+        Constraint::Length(15),
         Constraint::Fill(1),
         Constraint::Length(1),
         Constraint::Fill(1),
