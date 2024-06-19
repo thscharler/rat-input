@@ -444,6 +444,9 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineSt
     #[allow(clippy::redundant_closure)]
     fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> MenuOutcome {
         let res = match event {
+            ct_event!(key press ' ') => self
+                .selected
+                .map_or(MenuOutcome::Unchanged, |v| MenuOutcome::Selected(v)),
             ct_event!(key press cc) => {
                 if self.select_by_key(*cc) {
                     MenuOutcome::Activated(self.selected.expect("selected"))
