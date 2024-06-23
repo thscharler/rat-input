@@ -60,11 +60,11 @@ pub(crate) fn revert_style(mut style: Style) -> Style {
 }
 
 /// Select previous.
-pub(crate) fn prev_opt(select: Option<usize>, change: usize) -> Option<usize> {
+pub(crate) fn prev_opt(select: Option<usize>, change: usize, len: usize) -> Option<usize> {
     if let Some(select) = select {
         Some(prev(select, change))
     } else {
-        Some(0)
+        Some(len.saturating_sub(1))
     }
 }
 

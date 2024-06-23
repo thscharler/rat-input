@@ -30,7 +30,7 @@ use ratatui::layout::Rect;
 use ratatui::prelude::{StatefulWidget, Stylize};
 use ratatui::style::Style;
 use ratatui::text::Line;
-use ratatui::widgets::{Block, Widget, WidgetRef};
+use ratatui::widgets::{Block, StatefulWidgetRef, Widget, WidgetRef};
 
 /// Placement relative to the Rect given to render.
 ///
@@ -63,12 +63,12 @@ pub struct PopupMenu<'a> {
     placement: Placement,
 
     style: Style,
-    select_style: Option<Style>,
+    focus_style: Option<Style>,
     block: Option<Block<'a>>,
 }
 
 /// State of the popup-menu.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PopupMenuState {
     /// Total area
     pub area: Rect,
@@ -104,7 +104,7 @@ impl<'a> PopupMenu<'a> {
             ((text_width.unwrap_or(10) as u16) / 2) * 3
         };
 
-        let vertical_margin = if self.block.is_some() { 1 } else { 0 };
+        let vertical_margin = if self.block.is_some() { 1 } else { 1 };
         let horizontal_margin = if self.block.is_some() { 2 } else { 1 };
         let len = self.items.len() as u16;
 
@@ -197,7 +197,7 @@ impl<'a> PopupMenu<'a> {
     /// Take a style-set.
     pub fn styles(mut self, styles: MenuStyle) -> Self {
         self.style = styles.style;
-        self.select_style = styles.select;
+        self.focus_style = styles.focus;
         self
     }
 
@@ -209,7 +209,7 @@ impl<'a> PopupMenu<'a> {
 
     /// Focus/Selection style.
     pub fn focus_style(mut self, style: Style) -> Self {
-        self.select_style = Some(style);
+        self.focus_style = Some(style);
         self
     }
 
@@ -220,31 +220,43 @@ impl<'a> PopupMenu<'a> {
     }
 }
 
+impl<'a> StatefulWidgetRef for PopupMenu<'a> {
+    type State = PopupMenuState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        render_ref(self, area, buf, state);
+    }
+}
+
 impl<'a> StatefulWidget for PopupMenu<'a> {
     type State = PopupMenuState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.navchar = self.navchar.clone();
+        render_ref(&self, area, buf, state);
+    }
+}
 
-        self.layout(area, buf.area, state);
+fn render_ref(widget: &PopupMenu<'_>, area: Rect, buf: &mut Buffer, state: &mut PopupMenuState) {
+    state.navchar = widget.navchar.clone();
 
-        Fill::new().style(self.style).render(state.area, buf);
-        self.block.render_ref(state.area, buf);
+    widget.layout(area, buf.area, state);
 
-        for (n, txt) in self.items.iter().enumerate() {
-            let style = if state.selected == Some(n) {
-                if let Some(focus) = self.select_style {
-                    focus
-                } else {
-                    Style::default().on_yellow()
-                }
+    Fill::new().style(widget.style).render(state.area, buf);
+    widget.block.render_ref(state.area, buf);
+
+    for (n, txt) in widget.items.iter().enumerate() {
+        let style = if state.selected == Some(n) {
+            if let Some(focus) = widget.focus_style {
+                focus
             } else {
-                self.style
-            };
+                Style::default().on_yellow()
+            }
+        } else {
+            widget.style
+        };
 
-            buf.set_style(state.item_areas[n], style);
-            txt.render(state.item_areas[n], buf);
-        }
+        buf.set_style(state.item_areas[n], style);
+        txt.render(state.item_areas[n], buf);
     }
 }
 
@@ -285,7 +297,7 @@ impl PopupMenuState {
     #[inline]
     pub fn prev(&mut self) -> bool {
         let old = self.selected;
-        self.selected = prev_opt(self.selected, 1);
+        self.selected = prev_opt(self.selected, 1, self.len());
         old != self.selected
     }
 

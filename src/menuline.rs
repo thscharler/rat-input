@@ -113,29 +113,29 @@ impl<'a> MenuLine<'a> {
 
     /// Base style.
     #[inline]
-    pub fn style(mut self, style: impl Into<Style>) -> Self {
-        self.style = style.into();
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = style;
         self
     }
 
     /// Menu-title style.
     #[inline]
-    pub fn title_style(mut self, style: impl Into<Style>) -> Self {
-        self.title_style = Some(style.into());
+    pub fn title_style(mut self, style: Style) -> Self {
+        self.title_style = Some(style);
         self
     }
 
     /// Selection
     #[inline]
-    pub fn select_style(mut self, style: impl Into<Style>) -> Self {
-        self.select_style = Some(style.into());
+    pub fn select_style(mut self, style: Style) -> Self {
+        self.select_style = Some(style);
         self
     }
 
     /// Selection + Focus
     #[inline]
-    pub fn focus_style(mut self, style: impl Into<Style>) -> Self {
-        self.focus_style = Some(style.into());
+    pub fn focus_style(mut self, style: Style) -> Self {
+        self.focus_style = Some(style);
         self
     }
 }
@@ -280,7 +280,7 @@ impl MenuLineState {
     #[inline]
     pub fn prev(&mut self) -> bool {
         let old = self.selected;
-        self.selected = prev_opt(self.selected, 1);
+        self.selected = prev_opt(self.selected, 1, self.len());
         old != self.selected
     }
 
