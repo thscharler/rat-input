@@ -1,17 +1,14 @@
 use anyhow::anyhow;
-use chrono::{Local, NaiveTime};
 use crossterm::cursor::{DisableBlinking, EnableBlinking, SetCursorStyle};
 use crossterm::event::{
     DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, Event,
-    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
-use format_num_pattern::NumberFormat;
 use log::debug;
-use rat_event::util::MouseFlags;
 use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent};
 use rat_input::event::Outcome;
 use rat_input::layout_grid::layout_grid;
@@ -21,7 +18,6 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
-use ratatui::text::Span;
 use ratatui::widgets::{Block, StatefulWidget};
 use ratatui::{Frame, Terminal};
 use std::fs;
@@ -49,7 +45,7 @@ fn main() -> Result<(), anyhow::Error> {
 fn setup_logging() -> Result<(), anyhow::Error> {
     _ = fs::remove_file("log.log");
     fern::Dispatch::new()
-        .format(|out, message, record| out.finish(format_args!("{}", message)))
+        .format(|out, message, _record| out.finish(format_args!("{}", message)))
         .level(log::LevelFilter::Debug)
         .chain(fern::log_file("log.log")?)
         .apply()?;
@@ -216,13 +212,13 @@ fn repaint_stuff(
 
 fn handle_stuff(
     event: &Event,
-    data: &mut Data,
+    _data: &mut Data,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r1 = if state.popup_active {
         match state.popup.handle(event, FocusKeys) {
             MenuOutcome::Selected(_) => Outcome::Changed,
-            MenuOutcome::Activated(n) => {
+            MenuOutcome::Activated(_) => {
                 state.popup_active = false;
                 Outcome::Changed
             }

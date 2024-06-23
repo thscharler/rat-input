@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
 use log::debug;
 use ratatui::style::{Style, Stylize};
-use ratatui::text::{Line, Span, Text};
+use ratatui::text::{Line, Span};
 use std::cmp::min;
 use std::iter::once;
 use std::mem;
@@ -17,12 +17,12 @@ pub(crate) fn menu_str(txt: &str) -> (Option<char>, Line<'_>) {
     let mut idx_navchar_start = None;
     let mut navchar = None;
     let mut idx_navchar_end = None;
-    let mut cit = txt.char_indices();
+    let cit = txt.char_indices();
     for (idx, c) in cit {
         if idx_underscore.is_none() && c == '_' {
             idx_underscore = Some(idx);
         } else if idx_underscore.is_some() && idx_navchar_start.is_none() {
-            navchar = Some(c);
+            navchar = Some(c.to_ascii_lowercase());
             idx_navchar_start = Some(idx);
         } else if idx_navchar_start.is_some() && idx_navchar_end.is_none() {
             idx_navchar_end = Some(idx);
@@ -57,11 +57,6 @@ pub(crate) fn revert_style(mut style: Style) -> Style {
     } else {
         style.black().on_white()
     }
-}
-
-/// Sum all widths.
-pub(crate) fn span_width(spans: &[Span<'_>]) -> u16 {
-    spans.iter().map(|v| v.width() as u16).sum()
 }
 
 /// Select previous.

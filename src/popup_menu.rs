@@ -19,29 +19,28 @@
 //! activated.
 //!
 
+use crate::_private::NonExhaustive;
 use crate::fill::Fill;
 use crate::menuline::{MenuOutcome, MenuStyle};
-use crate::util::menu_str;
-use crossterm::event::Event;
+use crate::util::{menu_str, next_opt, prev_opt};
 use rat_event::util::item_at_clicked;
-use rat_event::{ct_event, FocusKeys, HandleEvent};
-use rat_focus::ZRect;
+use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{StatefulWidget, Stylize};
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Widget, WidgetRef};
-use std::cmp::min;
 
 /// Placement relative to the Rect given to render.
 ///
 /// The popup-menu is always rendered outside the box,
 /// and this gives the relative placement.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Placement {
     /// On top of the given area. Placed slightly left, so that
     /// the menu text aligns with the left border.
+    #[default]
     Top,
     /// Placed left-top of the given area.
     /// For a submenu opening to the left.
@@ -55,7 +54,7 @@ pub enum Placement {
 }
 
 /// Popup menu.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PopupMenu<'a> {
     items: Vec<Line<'a>>,
     navchar: Vec<Option<char>>,
@@ -64,17 +63,15 @@ pub struct PopupMenu<'a> {
     placement: Placement,
 
     style: Style,
-    focus_style: Option<Style>,
+    select_style: Option<Style>,
     block: Option<Block<'a>>,
 }
 
 /// State of the popup-menu.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct PopupMenuState {
     /// Total area
     pub area: Rect,
-    /// Area with z-index for the focus.
-    pub z_area: [ZRect; 1],
     /// Areas for each item.
     pub item_areas: Vec<Rect>,
     /// Letter navigation
@@ -82,6 +79,20 @@ pub struct PopupMenuState {
 
     /// Selected item.
     pub selected: Option<usize>,
+
+    pub non_exhaustive: NonExhaustive,
+}
+
+impl Default for PopupMenuState {
+    fn default() -> Self {
+        Self {
+            area: Default::default(),
+            item_areas: vec![],
+            navchar: vec![],
+            selected: None,
+            non_exhaustive: NonExhaustive,
+        }
+    }
 }
 
 impl<'a> PopupMenu<'a> {
@@ -132,7 +143,6 @@ impl<'a> PopupMenu<'a> {
         }
 
         state.area = area;
-        state.z_area[0] = ZRect::from((1, area));
 
         state.item_areas.clear();
         let mut r = Rect::new(
@@ -151,15 +161,7 @@ impl<'a> PopupMenu<'a> {
 impl<'a> PopupMenu<'a> {
     /// New, empty.
     pub fn new() -> Self {
-        Self {
-            items: Default::default(),
-            navchar: Default::default(),
-            style: Default::default(),
-            focus_style: None,
-            block: None,
-            placement: Placement::Top,
-            width: None,
-        }
+        Default::default()
     }
 
     /// Add a formatted item.
@@ -195,7 +197,7 @@ impl<'a> PopupMenu<'a> {
     /// Take a style-set.
     pub fn styles(mut self, styles: MenuStyle) -> Self {
         self.style = styles.style;
-        self.focus_style = styles.focus;
+        self.select_style = styles.select;
         self
     }
 
@@ -207,7 +209,7 @@ impl<'a> PopupMenu<'a> {
 
     /// Focus/Selection style.
     pub fn focus_style(mut self, style: Style) -> Self {
-        self.focus_style = Some(style);
+        self.select_style = Some(style);
         self
     }
 
@@ -231,7 +233,7 @@ impl<'a> StatefulWidget for PopupMenu<'a> {
 
         for (n, txt) in self.items.iter().enumerate() {
             let style = if state.selected == Some(n) {
-                if let Some(focus) = self.focus_style {
+                if let Some(focus) = self.select_style {
                     focus
                 } else {
                     Style::default().on_yellow()
@@ -248,64 +250,57 @@ impl<'a> StatefulWidget for PopupMenu<'a> {
 
 impl PopupMenuState {
     /// New
+    #[inline]
     pub fn new() -> Self {
-        Self {
-            area: Default::default(),
-            z_area: Default::default(),
-            item_areas: vec![],
-            navchar: vec![],
-            selected: None,
-        }
+        Default::default()
     }
 
     /// Number of items.
+    #[inline]
     pub fn len(&self) -> usize {
         self.item_areas.len()
     }
 
     /// Any items.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.item_areas.is_empty()
     }
 
     /// Selected item.
-    pub fn select(&mut self, select: Option<usize>) {
+    #[inline]
+    pub fn select(&mut self, select: Option<usize>) -> bool {
+        let old = self.selected;
         self.selected = select;
+        old != self.selected
     }
 
     /// Selected item.
+    #[inline]
     pub fn selected(&self) -> Option<usize> {
         self.selected
     }
 
     /// Select the previous item.
+    #[inline]
     pub fn prev(&mut self) -> bool {
         let old = self.selected;
-
-        self.selected = if let Some(selected) = self.selected {
-            Some(selected.saturating_sub(1))
-        } else {
-            Some(self.len().saturating_sub(1))
-        };
-
+        self.selected = prev_opt(self.selected, 1);
         old != self.selected
     }
 
     /// Select the next item.
+    #[inline]
     pub fn next(&mut self) -> bool {
         let old = self.selected;
-
-        self.selected = if let Some(selected) = self.selected {
-            Some(min(selected + 1, self.len().saturating_sub(1)))
-        } else {
-            Some(0)
-        };
-
+        self.selected = next_opt(self.selected, 1, self.len());
         old != self.selected
     }
 
     /// Select by navigation key.
+    #[inline]
     pub fn navigate(&mut self, c: char) -> MenuOutcome {
+        let c = c.to_ascii_lowercase();
         for (i, cc) in self.navchar.iter().enumerate() {
             if *cc == Some(c) {
                 if self.selected == Some(i) {
@@ -319,20 +314,28 @@ impl PopupMenuState {
         MenuOutcome::NotUsed
     }
 
-    /// Select item at position
-    pub fn select_at(&mut self, x: u16, y: u16) -> bool {
-        if let Some(idx) = item_at_clicked(&self.item_areas, *x, *y) {
+    /// Select item at position.
+    #[inline]
+    pub fn select_at(&mut self, pos: (u16, u16)) -> bool {
+        if let Some(idx) = item_at_clicked(&self.item_areas, pos.0, pos.1) {
             self.selected = Some(idx);
             true
         } else {
             false
         }
     }
+
+    /// Item at position.
+    #[inline]
+    pub fn item_at(&self, pos: (u16, u16)) -> Option<usize> {
+        item_at_clicked(&self.item_areas, pos.0, pos.1)
+    }
 }
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for PopupMenuState {
-    fn handle(&mut self, event: &Event, _qualifier: FocusKeys) -> MenuOutcome {
-        match event {
+    fn handle(&mut self, event: &crossterm::event::Event, _qualifier: FocusKeys) -> MenuOutcome {
+        let res = match event {
+            ct_event!(key press ANY-c) => self.navigate(*c),
             ct_event!(keycode press Up) => {
                 if self.prev() {
                     MenuOutcome::Selected(self.selected.expect("selected"))
@@ -347,6 +350,20 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for PopupMenuS
                     MenuOutcome::Unchanged
                 }
             }
+            ct_event!(keycode press Home) => {
+                if self.select(Some(0)) {
+                    MenuOutcome::Selected(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
+                }
+            }
+            ct_event!(keycode press End) => {
+                if self.select(Some(self.len().saturating_sub(1))) {
+                    MenuOutcome::Selected(self.selected.expect("selected"))
+                } else {
+                    MenuOutcome::Unchanged
+                }
+            }
             ct_event!(keycode press Enter) => {
                 if let Some(select) = self.selected {
                     MenuOutcome::Activated(select)
@@ -354,16 +371,37 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for PopupMenuS
                     MenuOutcome::NotUsed
                 }
             }
-            ct_event!(key press ANY-c) => self.navigate(*c),
-            ct_event!(mouse moved for x,y) if self.area.contains((*x, *y).into()) => {
-                if self.select_at(*x, *y) {
+
+            ct_event!(key release _)
+            | ct_event!(keycode release Up)
+            | ct_event!(keycode release Down)
+            | ct_event!(keycode release Home)
+            | ct_event!(keycode release End)
+            | ct_event!(keycode release Enter) => MenuOutcome::Unchanged,
+
+            _ => MenuOutcome::NotUsed,
+        };
+
+        if !res.is_consumed() {
+            self.handle(event, MouseOnly)
+        } else {
+            res
+        }
+    }
+}
+
+impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for PopupMenuState {
+    fn handle(&mut self, event: &crossterm::event::Event, _: MouseOnly) -> MenuOutcome {
+        match event {
+            ct_event!(mouse moved for col, row) if self.area.contains((*col, *row).into()) => {
+                if self.select_at((*col, *row)) {
                     MenuOutcome::Selected(self.selected().expect("selection"))
                 } else {
                     MenuOutcome::Unchanged
                 }
             }
-            ct_event!(mouse down Left for x,y) if self.area.contains((*x, *y).into()) => {
-                if self.select_at(*x, *y) {
+            ct_event!(mouse down Left for col, row) if self.area.contains((*col, *row).into()) => {
+                if self.select_at((*col, *row)) {
                     MenuOutcome::Activated(self.selected().expect("selection"))
                 } else {
                     MenuOutcome::Unchanged
@@ -372,4 +410,19 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for PopupMenuS
             _ => MenuOutcome::NotUsed,
         }
     }
+}
+
+/// Handle all events.
+/// The assumption is, the popup-menu is focused or it is hidden.
+/// This state must be handled outside of this widget.
+pub fn handle_events(state: &mut PopupMenuState, event: &crossterm::event::Event) -> MenuOutcome {
+    state.handle(event, FocusKeys)
+}
+
+/// Handle only mouse-events.
+pub fn handle_mouse_events(
+    state: &mut PopupMenuState,
+    event: &crossterm::event::Event,
+) -> MenuOutcome {
+    state.handle(event, MouseOnly)
 }

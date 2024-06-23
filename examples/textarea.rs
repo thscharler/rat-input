@@ -298,11 +298,11 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
 
     let menu1 = MenuLine::new()
         .title("TextArea")
-        .add("Long")
-        .add("Short")
-        .add("None")
-        .add("Lorem")
-        .add("_Quit")
+        .add_str("Long")
+        .add_str("Short")
+        .add_str("None")
+        .add_str("Lorem")
+        .add_str("_Quit")
         .title_style(Style::default().black().on_yellow())
         .style(Style::default().black().on_dark_gray());
     frame.render_stateful_widget(menu1, l1[2], &mut state.menu);
