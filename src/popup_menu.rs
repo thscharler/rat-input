@@ -20,15 +20,15 @@
 //!
 
 use crate::_private::NonExhaustive;
+use crate::event::Popup;
 use crate::fill::Fill;
 use crate::menuline::{MenuOutcome, MenuStyle};
 use crate::util::{menu_str, next_opt, prev_opt, revert_style};
-use log::debug;
 use rat_event::util::item_at_clicked;
-use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
+use rat_event::{ct_event, ConsumedEvent, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::prelude::{StatefulWidget, Stylize};
+use ratatui::prelude::StatefulWidget;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, StatefulWidgetRef, Widget, WidgetRef};
@@ -345,8 +345,8 @@ impl PopupMenuState {
     }
 }
 
-impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for PopupMenuState {
-    fn handle(&mut self, event: &crossterm::event::Event, _qualifier: FocusKeys) -> MenuOutcome {
+impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for PopupMenuState {
+    fn handle(&mut self, event: &crossterm::event::Event, _qualifier: Popup) -> MenuOutcome {
         let res = match event {
             ct_event!(key press ANY-c) => self.navigate(*c),
             ct_event!(keycode press Up) => {
@@ -429,7 +429,7 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for PopupMenuS
 /// The assumption is, the popup-menu is focused or it is hidden.
 /// This state must be handled outside of this widget.
 pub fn handle_events(state: &mut PopupMenuState, event: &crossterm::event::Event) -> MenuOutcome {
-    state.handle(event, FocusKeys)
+    state.handle(event, Popup)
 }
 
 /// Handle only mouse-events.

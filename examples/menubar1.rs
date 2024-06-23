@@ -11,7 +11,7 @@ use crossterm::ExecutableCommand;
 use log::debug;
 use rat_input::button::ButtonStyle;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
-use rat_input::menubar::{MenuBar, MenuBarPopup, MenuBarState, StaticMenu};
+use rat_input::menubar::{MenuBar, MenuBarState, MenuPopup, StaticMenu};
 use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
 use rat_input::msgdialog::{MsgDialog, MsgDialogState};
 use rat_input::popup_menu::Placement;
@@ -223,7 +223,7 @@ fn repaint_input(frame: &mut Frame<'_>, area: Rect, _data: &mut Data, state: &mu
 
     // todo: render something for the background ...
 
-    MenuBarPopup::new()
+    MenuPopup::new()
         .menu(&MENU)
         .block(Block::bordered())
         .width(15)
