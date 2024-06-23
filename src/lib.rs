@@ -12,6 +12,7 @@ pub mod layout_dialog;
 pub mod layout_edit;
 pub mod layout_grid;
 pub mod masked_input;
+pub mod menubar;
 pub mod menuline;
 pub mod msgdialog;
 pub mod number_input;

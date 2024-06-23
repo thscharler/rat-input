@@ -22,7 +22,8 @@
 use crate::_private::NonExhaustive;
 use crate::fill::Fill;
 use crate::menuline::{MenuOutcome, MenuStyle};
-use crate::util::{menu_str, next_opt, prev_opt};
+use crate::util::{menu_str, next_opt, prev_opt, revert_style};
+use log::debug;
 use rat_event::util::item_at_clicked;
 use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly};
 use ratatui::buffer::Buffer;
@@ -54,7 +55,7 @@ pub enum Placement {
 }
 
 /// Popup menu.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PopupMenu<'a> {
     items: Vec<Line<'a>>,
     navchar: Vec<Option<char>>,
@@ -101,7 +102,7 @@ impl<'a> PopupMenu<'a> {
             width
         } else {
             let text_width = self.items.iter().map(|v| v.width()).max();
-            ((text_width.unwrap_or(10) as u16) / 2) * 3
+            ((text_width.unwrap_or(10) as u16) * 3) / 2
         };
 
         let vertical_margin = if self.block.is_some() { 1 } else { 1 };
@@ -175,7 +176,7 @@ impl<'a> PopupMenu<'a> {
     /// Add a text-item.
     /// The first underscore is used to denote the navchar.
     pub fn add_str(mut self, txt: &'a str) -> Self {
-        let (navchar, item) = menu_str(txt);
+        let (item, navchar) = menu_str(txt);
         self.items.push(item);
         self.navchar.push(navchar);
         self
@@ -249,7 +250,7 @@ fn render_ref(widget: &PopupMenu<'_>, area: Rect, buf: &mut Buffer, state: &mut 
             if let Some(focus) = widget.focus_style {
                 focus
             } else {
-                Style::default().on_yellow()
+                revert_style(widget.style)
             }
         } else {
             widget.style

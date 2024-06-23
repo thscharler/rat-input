@@ -10,7 +10,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 /// Create a Line from the given text. The first '_' marks
 /// the navigation-char.
-pub(crate) fn menu_str(txt: &str) -> (Option<char>, Line<'_>) {
+pub(crate) fn menu_str(txt: &str) -> (Line<'_>, Option<char>) {
     let mut line = Line::default();
 
     let mut idx_underscore = None;
@@ -40,14 +40,14 @@ pub(crate) fn menu_str(txt: &str) -> (Option<char>, Line<'_>) {
                     .push(Span::from(&txt[idx_navchar_start..idx_navchar_end]).underlined());
                 line.spans.push(Span::from(&txt[idx_navchar_end..]));
 
-                return (navchar, line);
+                return (line, navchar);
             }
         }
     }
 
     line.spans.push(Span::from(txt));
 
-    (None, line)
+    (line, None)
 }
 
 pub(crate) fn revert_style(mut style: Style) -> Style {

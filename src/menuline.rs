@@ -95,9 +95,9 @@ impl<'a> MenuLine<'a> {
     /// Add item.
     #[inline]
     pub fn add_str(mut self, txt: &'a str) -> Self {
-        let (key, item) = menu_str(txt);
+        let (item, navchar) = menu_str(txt);
         self.items.push(item);
-        self.navchar.push(key);
+        self.navchar.push(navchar);
         self
     }
 
@@ -354,6 +354,10 @@ pub enum MenuOutcome {
     Selected(usize),
     /// The menuitem was selected and activated.
     Activated(usize),
+    /// Selected popup-menu.
+    MenuSelected(usize, usize),
+    /// Activated popup-menu.
+    MenuActivated(usize, usize),
 }
 
 impl ConsumedEvent for MenuOutcome {
@@ -370,6 +374,8 @@ impl From<MenuOutcome> for Outcome {
             MenuOutcome::Changed => Outcome::Changed,
             MenuOutcome::Selected(_) => Outcome::Changed,
             MenuOutcome::Activated(_) => Outcome::Changed,
+            MenuOutcome::MenuSelected(_, _) => Outcome::Changed,
+            MenuOutcome::MenuActivated(_, _) => Outcome::Changed,
         }
     }
 }
