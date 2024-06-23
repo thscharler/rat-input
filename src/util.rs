@@ -1,12 +1,54 @@
 #[allow(unused_imports)]
 use log::debug;
 use ratatui::style::{Style, Stylize};
-use ratatui::text::Span;
+use ratatui::text::{Line, Span, Text};
 use std::cmp::min;
 use std::iter::once;
 use std::mem;
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
+
+/// Create a Line from the given text. The first '_' marks
+/// the navigation-char.
+pub(crate) fn menu_str(txt: &str) -> (Option<char>, Line<'_>) {
+    let mut line = Line::default();
+
+    let mut idx_underscore = None;
+    let mut idx_navchar_start = None;
+    let mut navchar = None;
+    let mut idx_navchar_end = None;
+    let mut cit = txt.char_indices();
+    for (idx, c) in cit {
+        if idx_underscore.is_none() && c == '_' {
+            idx_underscore = Some(idx);
+        } else if idx_underscore.is_some() && idx_navchar_start.is_none() {
+            navchar = Some(c);
+            idx_navchar_start = Some(idx);
+        } else if idx_navchar_start.is_some() && idx_navchar_end.is_none() {
+            idx_navchar_end = Some(idx);
+        }
+    }
+    if idx_navchar_start.is_some() && idx_navchar_end.is_none() {
+        idx_navchar_end = Some(txt.len());
+    }
+
+    if let Some(idx_underscore) = idx_underscore {
+        if let Some(idx_navchar_start) = idx_navchar_start {
+            if let Some(idx_navchar_end) = idx_navchar_end {
+                line.spans.push(Span::from(&txt[0..idx_underscore]));
+                line.spans
+                    .push(Span::from(&txt[idx_navchar_start..idx_navchar_end]).underlined());
+                line.spans.push(Span::from(&txt[idx_navchar_end..]));
+
+                return (navchar, line);
+            }
+        }
+    }
+
+    line.spans.push(Span::from(txt));
+
+    (None, line)
+}
 
 pub(crate) fn revert_style(mut style: Style) -> Style {
     if style.fg.is_some() && style.bg.is_some() {

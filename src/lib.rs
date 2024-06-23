@@ -15,6 +15,7 @@ pub mod masked_input;
 pub mod menuline;
 pub mod msgdialog;
 pub mod number_input;
+pub mod popup_menu;
 pub mod statusline;
 pub mod textarea;
 pub mod util;
