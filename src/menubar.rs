@@ -25,9 +25,9 @@ use std::fmt::{Debug, Formatter};
 /// Trait for the structural data of the MenuBar.
 pub trait MenuStructure<'a> {
     /// Main menu.
-    fn menus(&'a self) -> Box<dyn Iterator<Item = (Line<'a>, Option<char>)> + 'a>;
+    fn menus(&'a self) -> Vec<(Line<'a>, Option<char>)>;
     /// Submenus.
-    fn submenu(&'a self, n: usize) -> Box<dyn Iterator<Item = (Line<'a>, Option<char>)> + 'a>;
+    fn submenu(&'a self, n: usize) -> Vec<(Line<'a>, Option<char>)>;
 }
 
 /// Static menu structure.
@@ -37,12 +37,12 @@ pub struct StaticMenu {
 }
 
 impl MenuStructure<'static> for StaticMenu {
-    fn menus(&'static self) -> Box<dyn Iterator<Item = (Line<'static>, Option<char>)>> {
-        Box::new(self.menu.iter().map(|v| menu_str(v.0)))
+    fn menus(&'static self) -> Vec<(Line<'static>, Option<char>)> {
+        self.menu.iter().map(|v| menu_str(v.0)).collect()
     }
 
-    fn submenu(&'static self, n: usize) -> Box<dyn Iterator<Item = (Line<'static>, Option<char>)>> {
-        Box::new(self.menu[n].1.iter().map(|v| menu_str(v)))
+    fn submenu(&'static self, n: usize) -> Vec<(Line<'static>, Option<char>)> {
+        self.menu[n].1.iter().map(|v| menu_str(v)).collect()
     }
 }
 
