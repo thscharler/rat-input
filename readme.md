@@ -48,18 +48,24 @@ Text input with an input mask.
 
 Simple button widget.
 
-# [DateInput](crate::date_input)
+# [DateInput](crate::date_input), [NumberInput](crate::number_input)
 
-Date input with format strings parsed by [chrono](chrono).
+Date input with format strings parsed by [chrono](https://docs.rs/chrono/latest/chrono/).
+Number input with format strings parsed
+by [format_num_pattern](https://docs.rs/format_num_pattern/latest/format_num_pattern/)
 
 # [Month](crate::calendar)
 
 Widget for calender display.
 
-# [MenuLine](crate::menuline)
+# [MenuLine](crate::menuline), [PopupMenu](crate::popup_menu) and [MenuBar](crate::menubar)
 
-Basic menu widget. Although no submenus as popup.
+Menu widgets.
 
 # [StatusLine](crate::statusline)
 
 Statusline with multiple segments.
+
+## TODO
+
+... more widgets 

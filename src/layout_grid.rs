@@ -1,3 +1,7 @@
+//!
+//! Calculate a layout-grid from horizontal + vertical Constraints.
+//!
+
 use ratatui::layout::{Layout, Rect};
 
 ///

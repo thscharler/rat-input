@@ -12,7 +12,7 @@ use log::debug;
 use rat_input::button::ButtonStyle;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::menubar::{MenuBar, MenuBarState, MenuPopup, StaticMenu};
-use rat_input::menuline::{MenuLine, MenuLineState, MenuOutcome};
+use rat_input::menuline::MenuOutcome;
 use rat_input::msgdialog::{MsgDialog, MsgDialogState};
 use rat_input::popup_menu::Placement;
 use rat_input::statusline::{StatusLine, StatusLineState};

@@ -30,17 +30,8 @@ pub mod event {
 
     pub use rat_event::{
         crossterm, ct_event, flow, flow_ok, util, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly,
-        Outcome,
+        Outcome, Popup,
     };
-
-    /// Runs only the event-handling for the popup-parts of a widget.
-    /// These should be run before the standard `FocusKey` or `MouseOnly` event-handlers,
-    /// to mitigate the front/back problem of overlaying widgets.
-    ///
-    /// There is no separate `MouseOnlyPopup`, as popups should always have the
-    /// input focus.
-    #[derive(Debug)]
-    pub struct Popup;
 
     /// Runs only the navigation events, not any editing.
     #[derive(Debug)]

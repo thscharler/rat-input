@@ -1,3 +1,9 @@
+//!
+//! Clears an area with a Style and a fill char.
+//!
+//! There is Buffer::set_style() to fill an area with a style.
+//! What is missing is the ability to overwrite the text-content too.
+//!
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;

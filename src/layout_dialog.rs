@@ -1,3 +1,8 @@
+//!
+//! Simple layout for dialogs.
+//!
+//! Calculates the content-area and the placement of buttons.
+//!
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
 
 /// Layout produced by [layout_dialog].

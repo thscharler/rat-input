@@ -9,8 +9,8 @@ use crossterm::terminal::{
 };
 use crossterm::ExecutableCommand;
 use log::debug;
-use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent};
-use rat_input::event::Outcome;
+use rat_event::{ct_event, ConsumedEvent, HandleEvent};
+use rat_input::event::{Outcome, Popup};
 use rat_input::layout_grid::layout_grid;
 use rat_input::menuline::MenuOutcome;
 use rat_input::popup_menu::{Placement, PopupMenu, PopupMenuState};
@@ -216,7 +216,7 @@ fn handle_stuff(
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r1 = if state.popup_active {
-        match state.popup.handle(event, FocusKeys) {
+        match state.popup.handle(event, Popup) {
             MenuOutcome::Selected(_) => Outcome::Changed,
             MenuOutcome::Activated(_) => {
                 state.popup_active = false;

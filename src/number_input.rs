@@ -1,3 +1,7 @@
+//!
+//! Widget for number input
+//!
+
 use crate::_private::NonExhaustive;
 use crate::event::{ReadOnly, TextOutcome};
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
