@@ -1,3 +1,7 @@
+# 0.16.6
+
+* Add PopupMenu, MenuBar widgets. Synchronize APIs with MenuLine.
+
 # 0.16.5
 
 * refactor: moved focus and invalid from the widget to the state.
