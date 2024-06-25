@@ -173,22 +173,22 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
 
     let area = state.area.intersection(buf.area);
 
-    let focus_style = if let Some(focus_style) = widget.focus_style {
-        focus_style
-    } else {
-        widget.style
-    };
+    // let focus_style = if let Some(focus_style) = widget.focus_style {
+    //     focus_style
+    // } else {
+    //     widget.style
+    // };
     let select_style = if let Some(select_style) = widget.select_style {
         select_style
     } else {
         Style::default().on_yellow()
     };
-
-    let (style, select_style) = if state.focus.get() {
-        (widget.style, focus_style)
-    } else {
-        (widget.style, select_style)
-    };
+    let style = widget.style;
+    // let (style, select_style) = if state.focus.get() {
+    //     (widget.style, select_style)
+    // } else {
+    //     (widget.style, select_style)
+    // };
 
     buf.set_style(area, style);
 
