@@ -26,6 +26,7 @@ use crate::menuline::{MenuOutcome, MenuStyle};
 use crate::util::{menu_str, next_opt, prev_opt, revert_style};
 use rat_event::util::item_at_clicked;
 use rat_event::{ct_event, ConsumedEvent, HandleEvent, MouseOnly};
+use rat_focus::{FocusFlag, HasFocusFlag, ZRect};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::StatefulWidget;
@@ -71,8 +72,12 @@ pub struct PopupMenu<'a> {
 /// State of the popup-menu.
 #[derive(Debug, Clone)]
 pub struct PopupMenuState {
+    /// Focusflag is used to decide the visible/not-visible state.
+    pub focus: FocusFlag,
     /// Total area
     pub area: Rect,
+    /// Area with z-index for Focus.
+    pub z_areas: [ZRect; 1],
     /// Areas for each item.
     pub item_areas: Vec<Rect>,
     /// Letter navigation
@@ -87,7 +92,9 @@ pub struct PopupMenuState {
 impl Default for PopupMenuState {
     fn default() -> Self {
         Self {
+            focus: Default::default(),
             area: Default::default(),
+            z_areas: [Default::default()],
             item_areas: vec![],
             navchar: vec![],
             selected: None,
@@ -144,6 +151,7 @@ impl<'a> PopupMenu<'a> {
         }
 
         state.area = area;
+        state.z_areas[0] = ZRect::from((1, area));
 
         state.item_areas.clear();
         let mut r = Rect::new(
@@ -238,6 +246,11 @@ impl<'a> StatefulWidget for PopupMenu<'a> {
 }
 
 fn render_ref(widget: &PopupMenu<'_>, area: Rect, buf: &mut Buffer, state: &mut PopupMenuState) {
+    if !state.active() {
+        state.clear();
+        return;
+    }
+
     state.navchar = widget.navchar.clone();
 
     widget.layout(area, buf.area, state);
@@ -261,11 +274,52 @@ fn render_ref(widget: &PopupMenu<'_>, area: Rect, buf: &mut Buffer, state: &mut 
     }
 }
 
+impl HasFocusFlag for PopupMenuState {
+    /// Focus flag.
+    fn focus(&self) -> &FocusFlag {
+        &self.focus
+    }
+
+    /// Focus area.
+    fn area(&self) -> Rect {
+        self.area
+    }
+
+    /// Widget area with z index.
+    fn z_areas(&self) -> &[ZRect] {
+        &self.z_areas
+    }
+
+    fn navigable(&self) -> bool {
+        false
+    }
+}
+
 impl PopupMenuState {
     /// New
     #[inline]
     pub fn new() -> Self {
         Default::default()
+    }
+
+    /// Reset the state to defaults.
+    pub fn clear(&mut self) {
+        *self = Default::default();
+    }
+
+    /// Show the popup.
+    pub fn flip_active(&mut self) {
+        self.focus.focus.set(!self.focus.get());
+    }
+
+    /// Show the popup.
+    pub fn active(&self) -> bool {
+        self.is_focused()
+    }
+
+    /// Show the popup.
+    pub fn set_active(&self, active: bool) {
+        self.focus.focus.set(active);
     }
 
     /// Number of items.
@@ -347,52 +401,56 @@ impl PopupMenuState {
 
 impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for PopupMenuState {
     fn handle(&mut self, event: &crossterm::event::Event, _qualifier: Popup) -> MenuOutcome {
-        let res = match event {
-            ct_event!(key press ANY-c) => self.navigate(*c),
-            ct_event!(keycode press Up) => {
-                if self.prev() {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+        let res = if self.is_focused() {
+            match event {
+                ct_event!(key press ANY-c) => self.navigate(*c),
+                ct_event!(keycode press Up) => {
+                    if self.prev() {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press Down) => {
-                if self.next() {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+                ct_event!(keycode press Down) => {
+                    if self.next() {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press Home) => {
-                if self.select(Some(0)) {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+                ct_event!(keycode press Home) => {
+                    if self.select(Some(0)) {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press End) => {
-                if self.select(Some(self.len().saturating_sub(1))) {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+                ct_event!(keycode press End) => {
+                    if self.select(Some(self.len().saturating_sub(1))) {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press Enter) => {
-                if let Some(select) = self.selected {
-                    MenuOutcome::Activated(select)
-                } else {
-                    MenuOutcome::NotUsed
+                ct_event!(keycode press Enter) => {
+                    if let Some(select) = self.selected {
+                        MenuOutcome::Activated(select)
+                    } else {
+                        MenuOutcome::NotUsed
+                    }
                 }
-            }
 
-            ct_event!(key release _)
-            | ct_event!(keycode release Up)
-            | ct_event!(keycode release Down)
-            | ct_event!(keycode release Home)
-            | ct_event!(keycode release End)
-            | ct_event!(keycode release Enter) => MenuOutcome::Unchanged,
+                ct_event!(key release _)
+                | ct_event!(keycode release Up)
+                | ct_event!(keycode release Down)
+                | ct_event!(keycode release Home)
+                | ct_event!(keycode release End)
+                | ct_event!(keycode release Enter) => MenuOutcome::Unchanged,
 
-            _ => MenuOutcome::NotUsed,
+                _ => MenuOutcome::NotUsed,
+            }
+        } else {
+            MenuOutcome::NotUsed
         };
 
         if !res.is_consumed() {
