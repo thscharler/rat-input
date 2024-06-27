@@ -3,12 +3,13 @@
 //!
 
 use crate::_private::NonExhaustive;
+use crate::util::revert_style;
 use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
 use rat_focus::FocusFlag;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::BlockExt;
-use ratatui::style::{Style, Stylize};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, WidgetRef};
 
@@ -23,7 +24,7 @@ pub struct Button<'a> {
 }
 
 /// Composite style.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ButtonStyle {
     pub style: Style,
     pub focus: Option<Style>,
@@ -195,12 +196,12 @@ fn render_ref(widget: &Button<'_>, area: Rect, buf: &mut Buffer, state: &mut But
     let focus_style = if let Some(focus_style) = widget.focus_style {
         focus_style
     } else {
-        widget.style
+        revert_style(widget.style)
     };
     let armed_style = if let Some(armed_style) = widget.armed_style {
         armed_style
     } else {
-        widget.style.reversed()
+        revert_style(widget.style)
     };
 
     if state.armed {
