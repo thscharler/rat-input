@@ -5,7 +5,7 @@
 
 use crate::_private::NonExhaustive;
 use chrono::{Datelike, NaiveDate, Weekday};
-use rat_focus::FocusFlag;
+use rat_focus::{FocusFlag, HasFocusFlag};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -331,4 +331,16 @@ fn render_ref(widget: &Month, area: Rect, buf: &mut Buffer, state: &mut MonthSta
     }
 
     w_month.render(area, buf);
+}
+
+impl HasFocusFlag for MonthState {
+    #[inline]
+    fn focus(&self) -> &FocusFlag {
+        &self.focus
+    }
+
+    #[inline]
+    fn area(&self) -> Rect {
+        self.area
+    }
 }
