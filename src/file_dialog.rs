@@ -17,7 +17,7 @@ use ratatui::widgets::{Block, ListItem, StatefulWidget, Widget};
 
 use crate::fill::Fill;
 use crate::input::{TextInput, TextInputState};
-use crate::layout_dialog::layout_dialog;
+use crate::layout::layout_dialog;
 use crate::list::{List, ListState};
 use crate::util::revert_style;
 

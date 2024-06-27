@@ -14,7 +14,7 @@ use log::debug;
 use rat_event::ct_event;
 use rat_event::util::MouseFlags;
 use rat_input::event::Outcome;
-use rat_input::layout_grid::layout_grid;
+use rat_input::layout::layout_grid;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};

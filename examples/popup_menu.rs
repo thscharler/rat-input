@@ -11,7 +11,7 @@ use crossterm::ExecutableCommand;
 use log::debug;
 use rat_event::{ct_event, ConsumedEvent, HandleEvent};
 use rat_input::event::{Outcome, Popup};
-use rat_input::layout_grid::layout_grid;
+use rat_input::layout::layout_grid;
 use rat_input::menuline::MenuOutcome;
 use rat_input::popup_menu::{Placement, PopupMenu, PopupMenuState};
 use ratatui::backend::CrosstermBackend;

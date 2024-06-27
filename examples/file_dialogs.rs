@@ -12,7 +12,7 @@ use rat_event::{flow_ok, Dialog, Popup};
 use rat_input::button::ButtonStyle;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::file_dialog::{FileOpen, FileOpenState, FileOutcome};
-use rat_input::layout_grid::layout_middle;
+use rat_input::layout::layout_middle;
 use rat_input::menubar::{MenuBar, MenuBarState, MenuPopup, StaticMenu};
 use rat_input::menuline::MenuOutcome;
 use rat_input::msgdialog::{MsgDialog, MsgDialogState};
