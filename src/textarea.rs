@@ -9,7 +9,8 @@ use crossterm::event::KeyModifiers;
 use log::debug;
 use rat_event::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
-use rat_focus::FocusFlag;
+use rat_focus::{FocusFlag, HasFocusFlag};
+use rat_scrolled::{ScrollingState, ScrollingWidget};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{BlockExt, Stylize};
@@ -149,6 +150,13 @@ impl<'a> TextArea<'a> {
     }
 }
 
+impl<'a> ScrollingWidget<TextAreaState> for TextArea<'a> {
+    fn need_scroll(&self, area: Rect, state: &mut TextAreaState) -> (bool, bool) {
+        let sy = state.line_len() > area.height as usize;
+        (true, sy)
+    }
+}
+
 impl<'a> StatefulWidgetRef for TextArea<'a> {
     type State = TextAreaState;
 
@@ -173,22 +181,12 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
 
     let area = state.area.intersection(buf.area);
 
-    // let focus_style = if let Some(focus_style) = widget.focus_style {
-    //     focus_style
-    // } else {
-    //     widget.style
-    // };
     let select_style = if let Some(select_style) = widget.select_style {
         select_style
     } else {
         Style::default().on_yellow()
     };
     let style = widget.style;
-    // let (style, select_style) = if state.focus.get() {
-    //     (widget.style, select_style)
-    // } else {
-    //     (widget.style, select_style)
-    // };
 
     buf.set_style(area, style);
 
@@ -279,27 +277,21 @@ impl Default for TextAreaState {
     }
 }
 
+impl HasFocusFlag for TextAreaState {
+    fn focus(&self) -> &FocusFlag {
+        &self.focus
+    }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
+}
+
 impl TextAreaState {
     /// New State.
     #[inline]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Renders the widget in focused style.
-    ///
-    /// This flag is not used for event-handling.
-    #[inline]
-    pub fn set_focused(&mut self, focus: bool) {
-        self.focus.focus.set(focus);
-    }
-
-    /// Renders the widget in focused style.
-    ///
-    /// This flag is not used for event-handling.
-    #[inline]
-    pub fn is_focused(&mut self) -> bool {
-        self.focus.focus.get()
     }
 
     /// Clear everything.
@@ -855,24 +847,28 @@ impl TextAreaState {
 
     /// Cursor position on the screen.
     pub fn screen_cursor(&self) -> Option<(u16, u16)> {
-        let (cx, cy) = self.value.cursor();
-        let (ox, oy) = self.value.offset();
+        if self.is_focused() {
+            let (cx, cy) = self.value.cursor();
+            let (ox, oy) = self.value.offset();
 
-        if cy < oy {
-            None
-        } else if cy >= oy + self.inner.height as usize {
-            None
-        } else {
-            let sy = cy - oy;
-            if cx < ox {
+            if cy < oy {
                 None
-            } else if cx > ox + self.inner.width as usize {
+            } else if cy >= oy + self.inner.height as usize {
                 None
             } else {
-                let sx = self.to_screen_col((cx, cy)).expect("valid_cursor");
+                let sy = cy - oy;
+                if cx < ox {
+                    None
+                } else if cx > ox + self.inner.width as usize {
+                    None
+                } else {
+                    let sx = self.to_screen_col((cx, cy)).expect("valid_cursor");
 
-                Some((self.inner.x + sx, self.inner.y + sy as u16))
+                    Some((self.inner.x + sx, self.inner.y + sy as u16))
+                }
             }
+        } else {
+            None
         }
     }
 
@@ -902,51 +898,51 @@ impl TextAreaState {
     }
 }
 
-impl TextAreaState {
+impl ScrollingState for TextAreaState {
     /// Maximum offset that is accessible with scrolling.
     ///
     /// This is shorter than the length of the content by whatever fills the last page.
     /// This is the base for the scrollbar content_length.
-    pub fn vertical_max_offset(&self) -> usize {
+    fn vertical_max_offset(&self) -> usize {
         self.value
             .len_lines()
             .saturating_sub(self.inner.height as usize)
     }
 
     /// Current vertical offset.
-    pub fn vertical_offset(&self) -> usize {
+    fn vertical_offset(&self) -> usize {
         self.value.offset().1
     }
 
     /// Vertical page-size at the current offset.
-    pub fn vertical_page(&self) -> usize {
+    fn vertical_page(&self) -> usize {
         self.inner.height as usize
     }
 
     /// Suggested scroll per scroll-event.
-    pub fn vertical_scroll(&self) -> usize {
+    fn vertical_scroll(&self) -> usize {
         max(self.vertical_page() / 10, 1)
     }
 
     /// Maximum offset that is accessible with scrolling.
     ///
     /// This is currently set to usize::MAX.
-    pub fn horizontal_max_offset(&self) -> usize {
+    fn horizontal_max_offset(&self) -> usize {
         usize::MAX
     }
 
     /// Current horizontal offset.
-    pub fn horizontal_offset(&self) -> usize {
+    fn horizontal_offset(&self) -> usize {
         self.value.offset().0
     }
 
     /// Horizontal page-size at the current offset.
-    pub fn horizontal_page(&self) -> usize {
+    fn horizontal_page(&self) -> usize {
         self.inner.width as usize
     }
 
     /// Suggested scroll per scroll-event.
-    pub fn horizontal_scroll(&self) -> usize {
+    fn horizontal_scroll(&self) -> usize {
         max(self.horizontal_page() / 10, 1)
     }
 
@@ -957,7 +953,7 @@ impl TextAreaState {
     ///
     /// The widget returns true if the offset changed at all.
     #[allow(unused_assignments)]
-    pub fn set_vertical_offset(&mut self, row_offset: usize) -> bool {
+    fn set_vertical_offset(&mut self, row_offset: usize) -> bool {
         let (ox, mut oy) = self.value.offset();
 
         oy = min(row_offset, self.vertical_max_offset());
@@ -972,41 +968,19 @@ impl TextAreaState {
     ///
     /// The widget returns true if the offset changed at all.
     #[allow(unused_assignments)]
-    pub fn set_horizontal_offset(&mut self, col_offset: usize) -> bool {
+    fn set_horizontal_offset(&mut self, col_offset: usize) -> bool {
         let (mut ox, oy) = self.value.offset();
 
         ox = col_offset;
 
         self.value.set_offset((ox, oy))
     }
+}
 
-    /// Scroll up by n items.
-    /// The widget returns true if the offset changed at all.
-    pub fn scroll_up(&mut self, n: usize) -> bool {
-        self.set_vertical_offset(self.vertical_offset().saturating_sub(n))
-    }
-
-    /// Scroll down by n items.
-    /// The widget returns true if the offset changed at all.
-    pub fn scroll_down(&mut self, n: usize) -> bool {
-        self.set_vertical_offset(self.vertical_offset() + n)
-    }
-
-    /// Scroll up by n items.
-    /// The widget returns true if the offset changed at all.
-    pub fn scroll_left(&mut self, n: usize) -> bool {
-        self.set_horizontal_offset(self.horizontal_offset().saturating_sub(n))
-    }
-
-    /// Scroll down by n items.
-    /// The widget returns true if the offset changed at all.
-    pub fn scroll_right(&mut self, n: usize) -> bool {
-        self.set_horizontal_offset(self.horizontal_offset() + n)
-    }
-
+impl TextAreaState {
     /// Scroll that the cursor is visible.
     /// All move-fn do this automatically.
-    pub fn scroll_cursor_to_visible(&mut self) -> bool {
+    fn scroll_cursor_to_visible(&mut self) -> bool {
         let old_offset = self.value.offset();
 
         let (cx, cy) = self.value.cursor();
@@ -1036,25 +1010,29 @@ impl TextAreaState {
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> TextOutcome {
-        let mut r = match event {
-            ct_event!(key press c)
-            | ct_event!(key press SHIFT-c)
-            | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c).into(),
-            ct_event!(keycode press Enter) => self.insert_newline().into(),
-            ct_event!(keycode press Backspace) => self.delete_prev_char().into(),
-            ct_event!(keycode press Delete) => self.delete_next_char().into(),
-            ct_event!(keycode press CONTROL-Backspace) => self.delete_prev_word().into(),
-            ct_event!(keycode press CONTROL-Delete) => self.delete_next_word().into(),
+        let mut r = if self.is_focused() {
+            match event {
+                ct_event!(key press c)
+                | ct_event!(key press SHIFT-c)
+                | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c).into(),
+                ct_event!(keycode press Enter) => self.insert_newline().into(),
+                ct_event!(keycode press Backspace) => self.delete_prev_char().into(),
+                ct_event!(keycode press Delete) => self.delete_next_char().into(),
+                ct_event!(keycode press CONTROL-Backspace) => self.delete_prev_word().into(),
+                ct_event!(keycode press CONTROL-Delete) => self.delete_next_word().into(),
 
-            ct_event!(key release _)
-            | ct_event!(key release SHIFT-_)
-            | ct_event!(key release CONTROL_ALT-_)
-            | ct_event!(keycode release Enter)
-            | ct_event!(keycode release Backspace)
-            | ct_event!(keycode release Delete)
-            | ct_event!(keycode release CONTROL-Backspace)
-            | ct_event!(keycode release CONTROL-Delete) => TextOutcome::Unchanged,
-            _ => TextOutcome::NotUsed,
+                ct_event!(key release _)
+                | ct_event!(key release SHIFT-_)
+                | ct_event!(key release CONTROL_ALT-_)
+                | ct_event!(keycode release Enter)
+                | ct_event!(keycode release Backspace)
+                | ct_event!(keycode release Delete)
+                | ct_event!(keycode release CONTROL-Backspace)
+                | ct_event!(keycode release CONTROL-Delete) => TextOutcome::Unchanged,
+                _ => TextOutcome::NotUsed,
+            }
+        } else {
+            TextOutcome::NotUsed
         };
         // remap to TextChanged
         if r == TextOutcome::Changed {
@@ -1070,93 +1048,99 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextAreaSt
 
 impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: ReadOnly) -> TextOutcome {
-        let mut r = match event {
-            ct_event!(keycode press Left) => self.move_left(1, false).into(),
-            ct_event!(keycode press Right) => self.move_right(1, false).into(),
-            ct_event!(keycode press Up) => self.move_up(1, false).into(),
-            ct_event!(keycode press Down) => self.move_down(1, false).into(),
-            ct_event!(keycode press PageUp) => self.move_up(self.vertical_page(), false).into(),
-            ct_event!(keycode press PageDown) => self.move_down(self.vertical_page(), false).into(),
-            ct_event!(keycode press Home) => self.move_to_line_start(false).into(),
-            ct_event!(keycode press End) => self.move_to_line_end(false).into(),
-            ct_event!(keycode press CONTROL-Left) => self.move_to_prev_word(false).into(),
-            ct_event!(keycode press CONTROL-Right) => self.move_to_next_word(false).into(),
-            ct_event!(keycode press CONTROL-Up) => false.into(),
-            ct_event!(keycode press CONTROL-Down) => false.into(),
-            ct_event!(keycode press CONTROL-PageUp) => self.move_to_screen_start(false).into(),
-            ct_event!(keycode press CONTROL-PageDown) => self.move_to_screen_end(false).into(),
-            ct_event!(keycode press CONTROL-Home) => self.move_to_start(false).into(),
-            ct_event!(keycode press CONTROL-End) => self.move_to_end(false).into(),
+        let mut r = if self.is_focused() {
+            match event {
+                ct_event!(keycode press Left) => self.move_left(1, false).into(),
+                ct_event!(keycode press Right) => self.move_right(1, false).into(),
+                ct_event!(keycode press Up) => self.move_up(1, false).into(),
+                ct_event!(keycode press Down) => self.move_down(1, false).into(),
+                ct_event!(keycode press PageUp) => self.move_up(self.vertical_page(), false).into(),
+                ct_event!(keycode press PageDown) => {
+                    self.move_down(self.vertical_page(), false).into()
+                }
+                ct_event!(keycode press Home) => self.move_to_line_start(false).into(),
+                ct_event!(keycode press End) => self.move_to_line_end(false).into(),
+                ct_event!(keycode press CONTROL-Left) => self.move_to_prev_word(false).into(),
+                ct_event!(keycode press CONTROL-Right) => self.move_to_next_word(false).into(),
+                ct_event!(keycode press CONTROL-Up) => false.into(),
+                ct_event!(keycode press CONTROL-Down) => false.into(),
+                ct_event!(keycode press CONTROL-PageUp) => self.move_to_screen_start(false).into(),
+                ct_event!(keycode press CONTROL-PageDown) => self.move_to_screen_end(false).into(),
+                ct_event!(keycode press CONTROL-Home) => self.move_to_start(false).into(),
+                ct_event!(keycode press CONTROL-End) => self.move_to_end(false).into(),
 
-            ct_event!(keycode press ALT-Left) => self.scroll_left(1).into(),
-            ct_event!(keycode press ALT-Right) => self.scroll_right(1).into(),
-            ct_event!(keycode press ALT-Up) => self.scroll_up(1).into(),
-            ct_event!(keycode press ALT-Down) => self.scroll_down(1).into(),
-            ct_event!(keycode press ALT-PageUp) => {
-                self.scroll_up(max(self.vertical_page() / 2, 1)).into()
-            }
-            ct_event!(keycode press ALT-PageDown) => {
-                self.scroll_down(max(self.vertical_page() / 2, 1)).into()
-            }
-            ct_event!(keycode press ALT_SHIFT-PageUp) => {
-                self.scroll_left(max(self.horizontal_page() / 5, 1)).into()
-            }
-            ct_event!(keycode press ALT_SHIFT-PageDown) => {
-                self.scroll_right(max(self.horizontal_page() / 5, 1)).into()
-            }
+                ct_event!(keycode press ALT-Left) => self.scroll_left(1).into(),
+                ct_event!(keycode press ALT-Right) => self.scroll_right(1).into(),
+                ct_event!(keycode press ALT-Up) => self.scroll_up(1).into(),
+                ct_event!(keycode press ALT-Down) => self.scroll_down(1).into(),
+                ct_event!(keycode press ALT-PageUp) => {
+                    self.scroll_up(max(self.vertical_page() / 2, 1)).into()
+                }
+                ct_event!(keycode press ALT-PageDown) => {
+                    self.scroll_down(max(self.vertical_page() / 2, 1)).into()
+                }
+                ct_event!(keycode press ALT_SHIFT-PageUp) => {
+                    self.scroll_left(max(self.horizontal_page() / 5, 1)).into()
+                }
+                ct_event!(keycode press ALT_SHIFT-PageDown) => {
+                    self.scroll_right(max(self.horizontal_page() / 5, 1)).into()
+                }
 
-            ct_event!(keycode press SHIFT-Left) => self.move_left(1, true).into(),
-            ct_event!(keycode press SHIFT-Right) => self.move_right(1, true).into(),
-            ct_event!(keycode press SHIFT-Up) => self.move_up(1, true).into(),
-            ct_event!(keycode press SHIFT-Down) => self.move_down(1, true).into(),
-            ct_event!(keycode press SHIFT-PageUp) => {
-                self.move_up(self.vertical_page(), true).into()
-            }
-            ct_event!(keycode press SHIFT-PageDown) => {
-                self.move_down(self.vertical_page(), true).into()
-            }
-            ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true).into(),
-            ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true).into(),
-            ct_event!(keycode press CONTROL_SHIFT-Left) => self.move_to_prev_word(true).into(),
-            ct_event!(keycode press CONTROL_SHIFT-Right) => self.move_to_next_word(true).into(),
-            ct_event!(key press CONTROL-'a') => self.select_all().into(),
+                ct_event!(keycode press SHIFT-Left) => self.move_left(1, true).into(),
+                ct_event!(keycode press SHIFT-Right) => self.move_right(1, true).into(),
+                ct_event!(keycode press SHIFT-Up) => self.move_up(1, true).into(),
+                ct_event!(keycode press SHIFT-Down) => self.move_down(1, true).into(),
+                ct_event!(keycode press SHIFT-PageUp) => {
+                    self.move_up(self.vertical_page(), true).into()
+                }
+                ct_event!(keycode press SHIFT-PageDown) => {
+                    self.move_down(self.vertical_page(), true).into()
+                }
+                ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true).into(),
+                ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true).into(),
+                ct_event!(keycode press CONTROL_SHIFT-Left) => self.move_to_prev_word(true).into(),
+                ct_event!(keycode press CONTROL_SHIFT-Right) => self.move_to_next_word(true).into(),
+                ct_event!(key press CONTROL-'a') => self.select_all().into(),
 
-            ct_event!(keycode release Left)
-            | ct_event!(keycode release Right)
-            | ct_event!(keycode release Up)
-            | ct_event!(keycode release Down)
-            | ct_event!(keycode release PageUp)
-            | ct_event!(keycode release PageDown)
-            | ct_event!(keycode release Home)
-            | ct_event!(keycode release End)
-            | ct_event!(keycode release CONTROL-Left)
-            | ct_event!(keycode release CONTROL-Right)
-            | ct_event!(keycode release CONTROL-Up)
-            | ct_event!(keycode release CONTROL-Down)
-            | ct_event!(keycode release CONTROL-PageUp)
-            | ct_event!(keycode release CONTROL-PageDown)
-            | ct_event!(keycode release CONTROL-Home)
-            | ct_event!(keycode release CONTROL-End)
-            | ct_event!(keycode release ALT-Left)
-            | ct_event!(keycode release ALT-Right)
-            | ct_event!(keycode release ALT-Up)
-            | ct_event!(keycode release ALT-Down)
-            | ct_event!(keycode release ALT-PageUp)
-            | ct_event!(keycode release ALT-PageDown)
-            | ct_event!(keycode release ALT_SHIFT-PageUp)
-            | ct_event!(keycode release ALT_SHIFT-PageDown)
-            | ct_event!(keycode release SHIFT-Left)
-            | ct_event!(keycode release SHIFT-Right)
-            | ct_event!(keycode release SHIFT-Up)
-            | ct_event!(keycode release SHIFT-Down)
-            | ct_event!(keycode release SHIFT-PageUp)
-            | ct_event!(keycode release SHIFT-PageDown)
-            | ct_event!(keycode release SHIFT-Home)
-            | ct_event!(keycode release SHIFT-End)
-            | ct_event!(keycode release CONTROL_SHIFT-Left)
-            | ct_event!(keycode release CONTROL_SHIFT-Right)
-            | ct_event!(key release CONTROL-'a') => TextOutcome::Unchanged,
-            _ => TextOutcome::NotUsed,
+                ct_event!(keycode release Left)
+                | ct_event!(keycode release Right)
+                | ct_event!(keycode release Up)
+                | ct_event!(keycode release Down)
+                | ct_event!(keycode release PageUp)
+                | ct_event!(keycode release PageDown)
+                | ct_event!(keycode release Home)
+                | ct_event!(keycode release End)
+                | ct_event!(keycode release CONTROL-Left)
+                | ct_event!(keycode release CONTROL-Right)
+                | ct_event!(keycode release CONTROL-Up)
+                | ct_event!(keycode release CONTROL-Down)
+                | ct_event!(keycode release CONTROL-PageUp)
+                | ct_event!(keycode release CONTROL-PageDown)
+                | ct_event!(keycode release CONTROL-Home)
+                | ct_event!(keycode release CONTROL-End)
+                | ct_event!(keycode release ALT-Left)
+                | ct_event!(keycode release ALT-Right)
+                | ct_event!(keycode release ALT-Up)
+                | ct_event!(keycode release ALT-Down)
+                | ct_event!(keycode release ALT-PageUp)
+                | ct_event!(keycode release ALT-PageDown)
+                | ct_event!(keycode release ALT_SHIFT-PageUp)
+                | ct_event!(keycode release ALT_SHIFT-PageDown)
+                | ct_event!(keycode release SHIFT-Left)
+                | ct_event!(keycode release SHIFT-Right)
+                | ct_event!(keycode release SHIFT-Up)
+                | ct_event!(keycode release SHIFT-Down)
+                | ct_event!(keycode release SHIFT-PageUp)
+                | ct_event!(keycode release SHIFT-PageDown)
+                | ct_event!(keycode release SHIFT-Home)
+                | ct_event!(keycode release SHIFT-End)
+                | ct_event!(keycode release CONTROL_SHIFT-Left)
+                | ct_event!(keycode release CONTROL_SHIFT-Right)
+                | ct_event!(key release CONTROL-'a') => TextOutcome::Unchanged,
+                _ => TextOutcome::NotUsed,
+            }
+        } else {
+            TextOutcome::NotUsed
         };
 
         if r == TextOutcome::NotUsed {
