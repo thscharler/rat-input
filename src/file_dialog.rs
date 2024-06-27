@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 
 use crate::button::{Button, ButtonOutcome, ButtonState};
 use crate::event::TextOutcome;
-use rat_event::{ct_event, flow_ok, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
+use rat_event::{
+    ct_event, flow_ok, ConsumedEvent, Dialog, FocusKeys, HandleEvent, MouseOnly, Outcome,
+};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
 use ratatui::prelude::{Alignment, BlockExt};
@@ -110,6 +112,10 @@ impl<'a> StatefulWidget for FileOpen<'a> {
     type State = FileOpenState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        if !state.active {
+            return;
+        }
+
         let layout = layout_dialog(
             area,
             Constraint::Fill(1),
@@ -159,21 +165,12 @@ impl<'a> StatefulWidget for FileOpen<'a> {
 
         Fill::new().style(self.style).render(inner, buf);
 
-        state.focus.to_string().render(layout.button_area, buf);
-
         state.path_state.focus.focus.set(state.focus == 4);
-        let mut path = TextInput::new();
+        let mut path = TextInput::new()
+            .select_style(select_style)
+            .focus_style(focus_style);
         if let Some(style) = self.path_style {
             path = path.style(style);
-        }
-        if let Some(style) = self.select_style {
-            path = path.select_style(style);
-        }
-        if let Some(style) = self.focus_style {
-            path = path.focus_style(style);
-        } else {
-            let style = revert_style(self.style);
-            path = path.focus_style(style);
         }
         path.render(l_vert[0], buf, &mut state.path_state);
 
@@ -214,34 +211,22 @@ impl<'a> StatefulWidget for FileOpen<'a> {
         state.file_state.area = l_hor[1];
 
         state.cancel_state.focus.set(state.focus == 3);
-        let mut cancel = Button::new().text(Text::from("Cancel").alignment(Alignment::Center));
+        let mut cancel = Button::new()
+            .text(Text::from("Cancel").alignment(Alignment::Center))
+            .armed_style(select_style)
+            .focus_style(focus_style);
         if let Some(style) = self.button_style {
             cancel = cancel.style(style);
-        }
-        if let Some(style) = self.select_style {
-            cancel = cancel.armed_style(style);
-        }
-        if let Some(style) = self.focus_style {
-            cancel = cancel.focus_style(style);
-        } else {
-            let style = revert_style(self.style);
-            cancel = cancel.focus_style(style);
         }
         cancel.render(layout.button(0), buf, &mut state.cancel_state);
 
         state.ok_state.focus.set(state.focus == 2);
-        let mut ok = Button::new().text(Text::from("Ok").alignment(Alignment::Center));
+        let mut ok = Button::new()
+            .text(Text::from("Ok").alignment(Alignment::Center))
+            .armed_style(select_style)
+            .focus_style(focus_style);
         if let Some(style) = self.button_style {
             ok = ok.style(style);
-        }
-        if let Some(style) = self.select_style {
-            ok = ok.armed_style(style);
-        }
-        if let Some(style) = self.focus_style {
-            ok = ok.focus_style(style);
-        } else {
-            let style = revert_style(self.style);
-            ok = ok.focus_style(style);
         }
         ok.render(layout.button(1), buf, &mut state.ok_state);
     }
@@ -362,16 +347,6 @@ pub enum FileOutcome {
     Cancel,
 }
 
-impl FileOutcome {
-    pub fn then_max(self, other: Self) -> Self {
-        if self.is_consumed() {
-            max(self, other)
-        } else {
-            FileOutcome::NotUsed
-        }
-    }
-}
-
 impl From<FileOutcome> for Outcome {
     fn from(value: FileOutcome) -> Self {
         match value {
@@ -422,13 +397,13 @@ impl ConsumedEvent for FileOutcome {
     }
 }
 
-impl HandleEvent<crossterm::event::Event, FocusKeys, Result<FileOutcome, io::Error>>
+impl HandleEvent<crossterm::event::Event, Dialog, Result<FileOutcome, io::Error>>
     for FileOpenState
 {
     fn handle(
         &mut self,
         event: &crossterm::event::Event,
-        _qualifier: FocusKeys,
+        _qualifier: Dialog,
     ) -> Result<FileOutcome, io::Error> {
         if !self.active {
             return Ok(FileOutcome::NotUsed);
@@ -549,6 +524,6 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Result<FileOutcome, io::Err
             return Ok(max(dir_changed, focus_outcome));
         }
 
-        Ok(focus_outcome)
+        Ok(max(FileOutcome::Unchanged, focus_outcome))
     }
 }
