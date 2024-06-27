@@ -108,7 +108,7 @@ impl Default for MsgDialogState {
             button: Default::default(),
             non_exhaustive: NonExhaustive,
         };
-        s.button.focus.set();
+        s.button.focus.set(true);
         s
     }
 }
