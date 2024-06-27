@@ -26,6 +26,9 @@ impl<const N: usize> LayoutDialog<N> {
 }
 
 /// Calculates a layout for a dialog with buttons.
+///
+/// width and height give the size of the target area.
+/// The target area is centered.
 pub fn layout_dialog<const N: usize>(
     area: Rect,
     width: Constraint,
@@ -35,16 +38,12 @@ pub fn layout_dialog<const N: usize>(
     button_spacing: u16,
     button_flex: Flex,
 ) -> LayoutDialog<N> {
-    let l_vertical = Layout::new(
-        Direction::Vertical,
-        [Constraint::Fill(1), width, Constraint::Fill(1)],
-    )
-    .split(area);
-    let l_dialog = Layout::new(
-        Direction::Horizontal,
-        [Constraint::Fill(1), height, Constraint::Fill(1)],
-    )
-    .split(l_vertical[1])[1];
+    let l_vertical = Layout::new(Direction::Vertical, [width])
+        .flex(Flex::Center)
+        .split(area);
+    let l_dialog = Layout::new(Direction::Horizontal, [height])
+        .flex(Flex::Center)
+        .split(l_vertical[0])[0];
 
     let l_inner = l_dialog.inner(&insets);
 
