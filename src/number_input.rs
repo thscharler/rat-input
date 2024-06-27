@@ -439,11 +439,8 @@ pub fn handle_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        HandleEvent::handle(state, event, FocusKeys)
-    } else {
-        HandleEvent::handle(state, event, MouseOnly)
-    }
+    state.widget.focus.set(focus);
+    HandleEvent::handle(state, event, FocusKeys)
 }
 
 /// Handle only navigation events.
@@ -454,11 +451,8 @@ pub fn handle_readonly_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        state.handle(event, ReadOnly)
-    } else {
-        state.handle(event, MouseOnly)
-    }
+    state.widget.focus.set(focus);
+    state.handle(event, ReadOnly)
 }
 
 /// Handle only mouse-events.

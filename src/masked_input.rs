@@ -911,11 +911,8 @@ pub fn handle_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        state.handle(event, FocusKeys)
-    } else {
-        state.handle(event, MouseOnly)
-    }
+    state.focus.set(focus);
+    state.handle(event, FocusKeys)
 }
 
 /// Handle only navigation events.
@@ -926,11 +923,8 @@ pub fn handle_readonly_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        state.handle(event, ReadOnly)
-    } else {
-        state.handle(event, MouseOnly)
-    }
+    state.focus.set(focus);
+    state.handle(event, ReadOnly)
 }
 
 /// Handle only mouse-events.
