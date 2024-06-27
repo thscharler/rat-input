@@ -16,6 +16,7 @@ use crate::menuline::{MenuLine, MenuLineState, MenuOutcome, MenuStyle};
 use crate::popup_menu::{Placement, PopupMenu, PopupMenuState};
 use crate::util::menu_str;
 use rat_event::{flow, FocusKeys, HandleEvent, MouseOnly};
+use rat_focus::HasFocusFlag;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{Line, StatefulWidget, Style};

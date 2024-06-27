@@ -16,7 +16,7 @@ use crate::util::{menu_str, next_opt, prev_opt, revert_style};
 use log::debug;
 use rat_event::util::{item_at_clicked, MouseFlags};
 use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
-use rat_focus::FocusFlag;
+use rat_focus::{FocusFlag, HasFocusFlag};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Style, Stylize};
@@ -229,26 +229,22 @@ impl Default for MenuStyle {
     }
 }
 
+impl HasFocusFlag for MenuLineState {
+    /// Focus flag.
+    fn focus(&self) -> &FocusFlag {
+        &self.focus
+    }
+
+    /// Focus area.
+    fn area(&self) -> Rect {
+        self.area
+    }
+}
+
 #[allow(clippy::len_without_is_empty)]
 impl MenuLineState {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Renders the widget in focused style.
-    ///
-    /// This flag is not used for event-handling.
-    #[inline]
-    pub fn set_focused(&mut self, focus: bool) {
-        self.focus.focus.set(focus);
-    }
-
-    /// Renders the widget in focused style.
-    ///
-    /// This flag is not used for event-handling.
-    #[inline]
-    pub fn is_focused(&mut self) -> bool {
-        self.focus.focus.get()
     }
 
     /// Number of items.
@@ -383,55 +379,59 @@ impl From<MenuOutcome> for Outcome {
 impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuLineState {
     #[allow(clippy::redundant_closure)]
     fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> MenuOutcome {
-        let res = match event {
-            ct_event!(key press ' ') => self
-                .selected
-                .map_or(MenuOutcome::Unchanged, |v| MenuOutcome::Selected(v)),
-            ct_event!(key press ANY-c) => self.navigate(*c),
-            ct_event!(keycode press Left) => {
-                if self.prev() {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+        let res = if self.is_focused() {
+            match event {
+                ct_event!(key press ' ') => self
+                    .selected
+                    .map_or(MenuOutcome::Unchanged, |v| MenuOutcome::Selected(v)),
+                ct_event!(key press ANY-c) => self.navigate(*c),
+                ct_event!(keycode press Left) => {
+                    if self.prev() {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press Right) => {
-                if self.next() {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+                ct_event!(keycode press Right) => {
+                    if self.next() {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press Home) => {
-                if self.select(Some(0)) {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+                ct_event!(keycode press Home) => {
+                    if self.select(Some(0)) {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press End) => {
-                if self.select(Some(self.len().saturating_sub(1))) {
-                    MenuOutcome::Selected(self.selected.expect("selected"))
-                } else {
-                    MenuOutcome::Unchanged
+                ct_event!(keycode press End) => {
+                    if self.select(Some(self.len().saturating_sub(1))) {
+                        MenuOutcome::Selected(self.selected.expect("selected"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(keycode press Enter) => {
-                if let Some(select) = self.selected {
-                    MenuOutcome::Activated(select)
-                } else {
-                    MenuOutcome::NotUsed
+                ct_event!(keycode press Enter) => {
+                    if let Some(select) = self.selected {
+                        MenuOutcome::Activated(select)
+                    } else {
+                        MenuOutcome::NotUsed
+                    }
                 }
-            }
 
-            ct_event!(key release _)
-            | ct_event!(keycode release Left)
-            | ct_event!(keycode release Right)
-            | ct_event!(keycode release Home)
-            | ct_event!(keycode release End)
-            | ct_event!(keycode release Enter) => MenuOutcome::Unchanged,
+                ct_event!(key release _)
+                | ct_event!(keycode release Left)
+                | ct_event!(keycode release Right)
+                | ct_event!(keycode release Home)
+                | ct_event!(keycode release End)
+                | ct_event!(keycode release Enter) => MenuOutcome::Unchanged,
 
-            _ => MenuOutcome::NotUsed,
+                _ => MenuOutcome::NotUsed,
+            }
+        } else {
+            MenuOutcome::NotUsed
         };
 
         if res == MenuOutcome::NotUsed {

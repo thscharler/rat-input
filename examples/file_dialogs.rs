@@ -39,7 +39,7 @@ fn main() -> Result<(), anyhow::Error> {
         status: Default::default(),
         msg: Default::default(),
     };
-    state.menu.menu.set_focused(true);
+    state.menu.menu.focus.set(true);
 
     run_ui(&mut data, &mut state)
 }
