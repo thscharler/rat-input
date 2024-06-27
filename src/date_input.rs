@@ -10,6 +10,7 @@ use chrono::{Datelike, Days, Local, Months, NaiveDate};
 #[allow(unused_imports)]
 use log::debug;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
+use rat_focus::{FocusFlag, HasFocusFlag};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -501,6 +502,18 @@ impl DateInputState {
     }
 }
 
+impl HasFocusFlag for DateInputState {
+    #[inline]
+    fn focus(&self) -> &FocusFlag {
+        &self.widget.focus
+    }
+
+    #[inline]
+    fn area(&self) -> Rect {
+        self.widget.area
+    }
+}
+
 /// Add convenience keys:
 /// * `h` - today
 /// * `a` - January, 1st
@@ -522,7 +535,7 @@ pub struct ConvenientKeys;
 
 impl HandleEvent<crossterm::event::Event, ConvenientKeys, TextOutcome> for DateInputState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: ConvenientKeys) -> TextOutcome {
-        let r = {
+        let r = if self.is_focused() {
             match event {
                 ct_event!(key press 'h') => {
                     self.set_value(Local::now().date_naive());
@@ -640,6 +653,8 @@ impl HandleEvent<crossterm::event::Event, ConvenientKeys, TextOutcome> for DateI
                 }
                 _ => TextOutcome::NotUsed,
             }
+        } else {
+            TextOutcome::NotUsed
         };
 
         if r == TextOutcome::NotUsed {
@@ -676,11 +691,8 @@ pub fn handle_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        HandleEvent::handle(state, event, FocusKeys)
-    } else {
-        HandleEvent::handle(state, event, MouseOnly)
-    }
+    state.widget.focus.set(focus);
+    HandleEvent::handle(state, event, FocusKeys)
 }
 
 /// Handle only navigation events.
@@ -691,11 +703,8 @@ pub fn handle_readonly_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        state.handle(event, ReadOnly)
-    } else {
-        state.handle(event, MouseOnly)
-    }
+    state.widget.focus.set(focus);
+    state.handle(event, ReadOnly)
 }
 
 /// Handle only mouse-events.
