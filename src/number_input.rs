@@ -7,6 +7,7 @@ use crate::event::{ReadOnly, TextOutcome};
 use crate::masked_input::{MaskedInput, MaskedInputState, MaskedInputStyle};
 use format_num_pattern::{NumberFmtError, NumberFormat, NumberSymbols};
 use rat_event::{FocusKeys, HandleEvent, MouseOnly};
+use rat_focus::{FocusFlag, HasFocusFlag};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::Style;
@@ -107,6 +108,18 @@ impl<'a> StatefulWidget for NumberInput<'a> {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         self.widget.render(area, buf, &mut state.widget);
+    }
+}
+
+impl HasFocusFlag for NumberInputState {
+    #[inline]
+    fn focus(&self) -> &FocusFlag {
+        &self.widget.focus
+    }
+
+    #[inline]
+    fn area(&self) -> Rect {
+        self.widget.area
     }
 }
 
