@@ -10,7 +10,7 @@ use rat_event::{ct_event, flow, FocusKeys, HandleEvent, MouseOnly, Outcome};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{StatefulWidget, Style};
-use ratatui::widgets::{Block, HighlightSpacing, StatefulWidgetRef};
+use ratatui::widgets::{Block, StatefulWidgetRef};
 use std::cmp::min;
 
 pub use ratatui::widgets::{ListDirection, ListItem};
@@ -83,6 +83,12 @@ impl<'a> List<'a> {
     /// List direction.
     pub fn direction(mut self, direction: ListDirection) -> Self {
         self.widget = self.widget.direction(direction);
+        self
+    }
+
+    /// Style
+    pub fn highlight_style(mut self, style: Style) -> Self {
+        self.widget = self.widget.highlight_style(style);
         self
     }
 
