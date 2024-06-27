@@ -22,7 +22,7 @@ use crate::util;
 use log::debug;
 use rat_event::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
-use rat_focus::FocusFlag;
+use rat_focus::{FocusFlag, HasFocusFlag};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::BlockExt;
@@ -252,22 +252,6 @@ impl Default for TextInputState {
 impl TextInputState {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Renders the widget in focused style.
-    ///
-    /// This flag is not used for event-handling.
-    #[inline]
-    pub fn set_focused(&mut self, focus: bool) {
-        self.focus.focus.set(focus);
-    }
-
-    /// Renders the widget in focused style.
-    ///
-    /// This flag is not used for event-handling.
-    #[inline]
-    pub fn is_focused(&mut self) -> bool {
-        self.focus.focus.get()
     }
 
     /// Renders the widget in invalid style.
@@ -574,44 +558,64 @@ impl TextInputState {
     /// The current text cursor as an absolute screen position.
     #[inline]
     pub fn screen_cursor(&self) -> Option<(u16, u16)> {
-        let cx = self.value.cursor();
-        let ox = self.value.offset();
+        if self.is_focused() {
+            let cx = self.value.cursor();
+            let ox = self.value.offset();
 
-        if cx < ox {
-            None
-        } else if cx > ox + self.inner.width as usize {
-            None
+            if cx < ox {
+                None
+            } else if cx > ox + self.inner.width as usize {
+                None
+            } else {
+                let sc = self.to_screen_col(cx).expect("valid_cursor");
+                Some((self.inner.x + sc, self.inner.y))
+            }
         } else {
-            let sc = self.to_screen_col(cx).expect("valid_cursor");
-            Some((self.inner.x + sc, self.inner.y))
+            None
         }
+    }
+}
+
+impl HasFocusFlag for TextInputState {
+    #[inline]
+    fn focus(&self) -> &FocusFlag {
+        &self.focus
+    }
+
+    #[inline]
+    fn area(&self) -> Rect {
+        self.area
     }
 }
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextInputState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> TextOutcome {
-        let mut r = match event {
-            ct_event!(key press c)
-            | ct_event!(key press SHIFT-c)
-            | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c).into(),
-            ct_event!(keycode press Backspace) => self.delete_prev_char().into(),
-            ct_event!(keycode press Delete) => self.delete_next_char().into(),
-            ct_event!(keycode press CONTROL-Backspace) => self.delete_prev_word().into(),
-            ct_event!(keycode press CONTROL-Delete) => self.delete_next_word().into(),
-            ct_event!(key press CONTROL-'d') => self.clear().into(),
+        let mut r = if self.is_focused() {
+            match event {
+                ct_event!(key press c)
+                | ct_event!(key press SHIFT-c)
+                | ct_event!(key press CONTROL_ALT-c) => self.insert_char(*c).into(),
+                ct_event!(keycode press Backspace) => self.delete_prev_char().into(),
+                ct_event!(keycode press Delete) => self.delete_next_char().into(),
+                ct_event!(keycode press CONTROL-Backspace) => self.delete_prev_word().into(),
+                ct_event!(keycode press CONTROL-Delete) => self.delete_next_word().into(),
+                ct_event!(key press CONTROL-'d') => self.clear().into(),
 
-            ct_event!(key release _)
-            | ct_event!(key release SHIFT-_)
-            | ct_event!(key release CONTROL_ALT-_)
-            | ct_event!(keycode release Backspace)
-            | ct_event!(keycode release Delete)
-            | ct_event!(keycode release CONTROL-Backspace)
-            | ct_event!(keycode release CONTROL-Delete)
-            | ct_event!(key release CONTROL-'d') => TextOutcome::Unchanged,
+                ct_event!(key release _)
+                | ct_event!(key release SHIFT-_)
+                | ct_event!(key release CONTROL_ALT-_)
+                | ct_event!(keycode release Backspace)
+                | ct_event!(keycode release Delete)
+                | ct_event!(keycode release CONTROL-Backspace)
+                | ct_event!(keycode release CONTROL-Delete)
+                | ct_event!(key release CONTROL-'d') => TextOutcome::Unchanged,
 
-            _ => TextOutcome::NotUsed,
+                _ => TextOutcome::NotUsed,
+            }
+        } else {
+            TextOutcome::NotUsed
         };
-        // remap to TextChanged
+        // remap to TextChanged, comes from the bool->OutCome conversion!
         if r == TextOutcome::Changed {
             r = TextOutcome::TextChanged;
         }
@@ -625,36 +629,40 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, TextOutcome> for TextInputS
 
 impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for TextInputState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: ReadOnly) -> TextOutcome {
-        let mut r = match event {
-            ct_event!(keycode press Left) => self.move_to_prev(false).into(),
-            ct_event!(keycode press Right) => self.move_to_next(false).into(),
-            ct_event!(keycode press CONTROL-Left) => self.move_to_prev_word(false).into(),
-            ct_event!(keycode press CONTROL-Right) => self.move_to_next_word(false).into(),
-            ct_event!(keycode press Home) => self.move_to_line_start(false).into(),
-            ct_event!(keycode press End) => self.move_to_line_end(false).into(),
-            ct_event!(keycode press SHIFT-Left) => self.move_to_prev(true).into(),
-            ct_event!(keycode press SHIFT-Right) => self.move_to_next(true).into(),
-            ct_event!(keycode press CONTROL_SHIFT-Left) => self.move_to_prev_word(true).into(),
-            ct_event!(keycode press CONTROL_SHIFT-Right) => self.move_to_next_word(true).into(),
-            ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true).into(),
-            ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true).into(),
-            ct_event!(key press CONTROL-'a') => self.select_all().into(),
+        let mut r = if self.is_focused() {
+            match event {
+                ct_event!(keycode press Left) => self.move_to_prev(false).into(),
+                ct_event!(keycode press Right) => self.move_to_next(false).into(),
+                ct_event!(keycode press CONTROL-Left) => self.move_to_prev_word(false).into(),
+                ct_event!(keycode press CONTROL-Right) => self.move_to_next_word(false).into(),
+                ct_event!(keycode press Home) => self.move_to_line_start(false).into(),
+                ct_event!(keycode press End) => self.move_to_line_end(false).into(),
+                ct_event!(keycode press SHIFT-Left) => self.move_to_prev(true).into(),
+                ct_event!(keycode press SHIFT-Right) => self.move_to_next(true).into(),
+                ct_event!(keycode press CONTROL_SHIFT-Left) => self.move_to_prev_word(true).into(),
+                ct_event!(keycode press CONTROL_SHIFT-Right) => self.move_to_next_word(true).into(),
+                ct_event!(keycode press SHIFT-Home) => self.move_to_line_start(true).into(),
+                ct_event!(keycode press SHIFT-End) => self.move_to_line_end(true).into(),
+                ct_event!(key press CONTROL-'a') => self.select_all().into(),
 
-            ct_event!(keycode release Left)
-            | ct_event!(keycode release Right)
-            | ct_event!(keycode release CONTROL-Left)
-            | ct_event!(keycode release CONTROL-Right)
-            | ct_event!(keycode release Home)
-            | ct_event!(keycode release End)
-            | ct_event!(keycode release SHIFT-Left)
-            | ct_event!(keycode release SHIFT-Right)
-            | ct_event!(keycode release CONTROL_SHIFT-Left)
-            | ct_event!(keycode release CONTROL_SHIFT-Right)
-            | ct_event!(keycode release SHIFT-Home)
-            | ct_event!(keycode release SHIFT-End)
-            | ct_event!(key release CONTROL-'a') => TextOutcome::Unchanged,
+                ct_event!(keycode release Left)
+                | ct_event!(keycode release Right)
+                | ct_event!(keycode release CONTROL-Left)
+                | ct_event!(keycode release CONTROL-Right)
+                | ct_event!(keycode release Home)
+                | ct_event!(keycode release End)
+                | ct_event!(keycode release SHIFT-Left)
+                | ct_event!(keycode release SHIFT-Right)
+                | ct_event!(keycode release CONTROL_SHIFT-Left)
+                | ct_event!(keycode release CONTROL_SHIFT-Right)
+                | ct_event!(keycode release SHIFT-Home)
+                | ct_event!(keycode release SHIFT-End)
+                | ct_event!(key release CONTROL-'a') => TextOutcome::Unchanged,
 
-            _ => TextOutcome::NotUsed,
+                _ => TextOutcome::NotUsed,
+            }
+        } else {
+            TextOutcome::NotUsed
         };
 
         if r == TextOutcome::NotUsed {
@@ -672,7 +680,11 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextInputS
                 self.set_screen_cursor(c, true).into()
             }
             ct_event!(mouse down Left for column,row) => {
-                if self.inner.contains((*column, *row).into()) {
+                if self.gained_focus() {
+                    // don't react to the first click that's for
+                    // focus. this one shouldn't demolish the selection.
+                    TextOutcome::Unchanged
+                } else if self.inner.contains((*column, *row).into()) {
                     let c = column - self.inner.x;
                     self.set_screen_cursor(c as isize, false).into()
                 } else {
@@ -692,11 +704,8 @@ pub fn handle_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        state.handle(event, FocusKeys)
-    } else {
-        state.handle(event, MouseOnly)
-    }
+    state.focus.set(focus);
+    state.handle(event, FocusKeys)
 }
 
 /// Handle only navigation events.
@@ -707,11 +716,8 @@ pub fn handle_readonly_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> TextOutcome {
-    if focus {
-        state.handle(event, ReadOnly)
-    } else {
-        state.handle(event, MouseOnly)
-    }
+    state.focus.set(focus);
+    state.handle(event, ReadOnly)
 }
 
 /// Handle only mouse-events.
