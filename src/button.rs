@@ -5,7 +5,7 @@
 use crate::_private::NonExhaustive;
 use crate::util::revert_style;
 use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly, Outcome};
-use rat_focus::FocusFlag;
+use rat_focus::{FocusFlag, HasFocusFlag};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::BlockExt;
@@ -252,6 +252,18 @@ impl ButtonState {
     }
 }
 
+impl HasFocusFlag for ButtonState {
+    #[inline]
+    fn focus(&self) -> &FocusFlag {
+        &self.focus
+    }
+
+    #[inline]
+    fn area(&self) -> Rect {
+        self.area
+    }
+}
+
 impl Default for ButtonState {
     fn default() -> Self {
         Self {
@@ -298,21 +310,25 @@ impl From<ButtonOutcome> for Outcome {
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, ButtonOutcome> for ButtonState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: FocusKeys) -> ButtonOutcome {
-        let r = match event {
-            ct_event!(keycode press Enter) => {
-                self.armed = true;
-                ButtonOutcome::Changed
-            }
-            ct_event!(keycode release Enter) => {
-                if self.armed {
-                    self.armed = false;
-                    ButtonOutcome::Pressed
-                } else {
-                    // single key release happen more often than not.
-                    ButtonOutcome::Unchanged
+        let r = if self.is_focused() {
+            match event {
+                ct_event!(keycode press Enter) => {
+                    self.armed = true;
+                    ButtonOutcome::Changed
                 }
+                ct_event!(keycode release Enter) => {
+                    if self.armed {
+                        self.armed = false;
+                        ButtonOutcome::Pressed
+                    } else {
+                        // single key release happen more often than not.
+                        ButtonOutcome::Unchanged
+                    }
+                }
+                _ => ButtonOutcome::NotUsed,
             }
-            _ => ButtonOutcome::NotUsed,
+        } else {
+            ButtonOutcome::NotUsed
         };
 
         if r == ButtonOutcome::NotUsed {
@@ -360,11 +376,8 @@ pub fn handle_events(
     focus: bool,
     event: &crossterm::event::Event,
 ) -> ButtonOutcome {
-    if focus {
-        HandleEvent::handle(state, event, FocusKeys)
-    } else {
-        HandleEvent::handle(state, event, MouseOnly)
-    }
+    state.focus.set(focus);
+    HandleEvent::handle(state, event, FocusKeys)
 }
 
 /// Handle only mouse-events.

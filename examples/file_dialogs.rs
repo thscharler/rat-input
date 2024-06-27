@@ -8,8 +8,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
-use log::debug;
-use rat_event::{flow_ok, Popup};
+use rat_event::{flow_ok, Dialog, Popup};
 use rat_input::button::ButtonStyle;
 use rat_input::event::{FocusKeys, HandleEvent, Outcome};
 use rat_input::file_dialog::{FileOpen, FileOpenState, FileOutcome};
@@ -276,7 +275,7 @@ fn handle_input(
         r => r.into(),
     });
 
-    flow_ok!(match state.file_open.handle(event, FocusKeys)? {
+    flow_ok!(match state.file_open.handle(event, Dialog)? {
         FileOutcome::Ok => {
             state
                 .status

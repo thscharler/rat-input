@@ -35,7 +35,7 @@ fn main() -> Result<(), anyhow::Error> {
         menu: Default::default(),
         status: Default::default(),
     };
-    state.menu.focus.set();
+    state.menu.focus.set(true);
     insert_text_1(&mut state);
 
     run_ui(&mut data, &mut state)
