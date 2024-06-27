@@ -16,7 +16,7 @@ use crate::menuline::{MenuLine, MenuLineState, MenuOutcome, MenuStyle};
 use crate::popup_menu::{Placement, PopupMenu, PopupMenuState};
 use crate::util::menu_str;
 use rat_event::{flow, FocusKeys, HandleEvent, MouseOnly};
-use rat_focus::HasFocusFlag;
+use rat_focus::{FocusFlag, HasFocusFlag, ZRect};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{Line, StatefulWidget, Style};
@@ -70,10 +70,11 @@ pub struct MenuPopup<'a> {
 pub struct MenuBarState {
     /// State for the menu.
     pub menu: MenuLineState,
-    /// Popups visible?
-    pub popup_active: bool,
     /// State for the last rendered popup menu.
     pub popup: PopupMenuState,
+
+    pub area: Rect,
+    pub z_areas: [ZRect; 2],
 }
 
 impl<'a> MenuBar<'a> {
@@ -194,7 +195,7 @@ impl<'a> StatefulWidgetRef for MenuBar<'a> {
     type State = MenuBarState;
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.menu.render_ref(area, buf, &mut state.menu);
+        render_menubar(self, area, buf, state);
     }
 }
 
@@ -202,8 +203,16 @@ impl<'a> StatefulWidget for MenuBar<'a> {
     type State = MenuBarState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.menu.render(area, buf, &mut state.menu);
+        render_menubar(&self, area, buf, state);
     }
+}
+
+fn render_menubar(widget: &MenuBar<'_>, area: Rect, buf: &mut Buffer, state: &mut MenuBarState) {
+    widget.menu.render_ref(area, buf, &mut state.menu);
+
+    // Combined area + each part with a z-index.
+    state.area = state.menu.area;
+    state.z_areas = [ZRect::from((0, state.menu.area)), ZRect::default()];
 }
 
 impl<'a> StatefulWidgetRef for MenuPopup<'a> {
@@ -228,27 +237,32 @@ fn render_menu_popup(
     buf: &mut Buffer,
     state: &mut MenuBarState,
 ) {
-    if state.popup_active {
-        if let Some(selected) = state.menu.selected {
-            if let Some(structure) = widget.structure {
-                let mut len = 0;
-                let mut popup = widget.popup.clone(); // TODO:???
-                for (item, navchar) in structure.submenu(selected) {
-                    popup = popup.add(item, navchar);
-                    len += 1;
-                }
+    // Combined area + each part with a z-index.
+    state.area = state.menu.area;
+    state.z_areas = [ZRect::from((0, state.menu.area)), ZRect::default()];
 
-                if len > 0 {
-                    let area = state.menu.item_areas[selected];
-                    popup.render(area, buf, &mut state.popup);
-                }
-            } else {
-                // no menu structure? ok.
-                state.popup = Default::default();
-            }
-        } else {
-            // no selection. ok.
-            state.popup = Default::default();
+    let Some(selected) = state.menu.selected() else {
+        return;
+    };
+    let Some(structure) = widget.structure else {
+        return;
+    };
+
+    if state.popup.is_focused() {
+        let mut len = 0;
+        let mut popup = widget.popup.clone(); // TODO: ???
+        for (item, navchar) in structure.submenu(selected) {
+            popup = popup.add(item, navchar);
+            len += 1;
+        }
+
+        if len > 0 {
+            let area = state.menu.item_areas[selected];
+            popup.render(area, buf, &mut state.popup);
+
+            // Combined area + each part with a z-index.
+            state.area = state.menu.area.union(state.popup.area);
+            state.z_areas[1] = ZRect::from((1, state.popup.area));
         }
     } else {
         state.popup = Default::default();
@@ -264,19 +278,37 @@ impl MenuBarState {
 
     /// Submenu visible/active.
     pub fn popup_active(&self) -> bool {
-        self.popup_active
+        self.popup.is_focused()
     }
 
     /// Submenu visible/active.
     pub fn set_popup_active(&mut self, active: bool) {
-        self.popup_active = active;
+        self.popup.focus.set(active);
+    }
+}
+
+impl HasFocusFlag for MenuBarState {
+    fn focus(&self) -> &FocusFlag {
+        &self.menu.focus
+    }
+
+    fn area(&self) -> Rect {
+        self.area
+    }
+
+    fn z_areas(&self) -> &[ZRect] {
+        &self.z_areas
     }
 }
 
 impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for MenuBarState {
     fn handle(&mut self, event: &crossterm::event::Event, _qualifier: Popup) -> MenuOutcome {
-        if let Some(selected) = self.menu.selected {
-            if self.popup_active {
+        if !self.is_focused() {
+            self.set_popup_active(false);
+        }
+
+        if let Some(selected) = self.menu.selected() {
+            if self.popup_active() {
                 match self.popup.handle(event, Popup) {
                     MenuOutcome::Selected(n) => MenuOutcome::MenuSelected(selected, n),
                     MenuOutcome::Activated(n) => MenuOutcome::MenuActivated(selected, n),
@@ -293,10 +325,14 @@ impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for MenuBarState {
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuBarState {
     fn handle(&mut self, event: &crossterm::event::Event, _qualifier: FocusKeys) -> MenuOutcome {
+        if !self.is_focused() {
+            self.set_popup_active(false);
+        }
+
         if self.menu.is_focused() {
             match self.menu.handle(event, FocusKeys) {
                 r @ MenuOutcome::Selected(_) => {
-                    self.popup_active = !self.popup_active;
+                    self.popup.flip_active();
                     r
                 }
                 r => r,
@@ -309,8 +345,12 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuBarSta
 
 impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for MenuBarState {
     fn handle(&mut self, event: &crossterm::event::Event, _qualifier: MouseOnly) -> MenuOutcome {
-        flow!(if let Some(selected) = self.menu.selected {
-            if self.popup_active {
+        if !self.is_focused() {
+            self.set_popup_active(false);
+        }
+
+        flow!(if let Some(selected) = self.menu.selected() {
+            if self.popup_active() {
                 match self.popup.handle(event, MouseOnly) {
                     MenuOutcome::Selected(n) => MenuOutcome::MenuSelected(selected, n),
                     MenuOutcome::Activated(n) => MenuOutcome::MenuActivated(selected, n),
@@ -323,14 +363,50 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for MenuBarSta
             MenuOutcome::NotUsed
         });
 
-        flow!(match self.menu.handle(event, MouseOnly) {
-            r @ MenuOutcome::Selected(_) => {
-                self.popup_active = !self.popup_active;
-                r
+        let r = self.menu.handle(event, MouseOnly);
+        match r {
+            MenuOutcome::Selected(_) => {
+                self.popup.flip_active();
             }
-            r => r,
-        });
+            _ => {}
+        };
 
-        MenuOutcome::NotUsed
+        r
     }
+}
+
+/// Handle menu events. Keyboard events are processed if focus is true.
+///
+/// Attention:
+/// For the event-handling of the popup-menus you need to call handle_popup_events().
+pub fn handle_events(
+    state: &mut MenuBarState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> MenuOutcome {
+    state.menu.focus.set(focus);
+    state.handle(event, FocusKeys)
+}
+
+/// Handle menu events for the popup-menu.
+///
+/// This one is separate, as it needs to be called before other event-handlers
+/// to cope with overlapping regions.
+///
+/// focus - is the menubar focused?
+pub fn handle_popup_events(
+    state: &mut MenuBarState,
+    focus: bool,
+    event: &crossterm::event::Event,
+) -> MenuOutcome {
+    state.menu.focus.set(focus);
+    state.handle(event, Popup)
+}
+
+/// Handle only mouse-events.
+pub fn handle_mouse_events(
+    state: &mut MenuLineState,
+    event: &crossterm::event::Event,
+) -> MenuOutcome {
+    state.handle(event, MouseOnly)
 }

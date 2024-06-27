@@ -256,7 +256,7 @@ fn handle_input(
         }
         MenuOutcome::MenuActivated(v, w) => {
             state.status.status(0, format!("Activated {}-{}", v, w));
-            state.menu.popup_active = false;
+            state.menu.set_popup_active(false);
         }
         _ => {}
     };
