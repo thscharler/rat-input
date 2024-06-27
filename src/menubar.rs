@@ -292,21 +292,17 @@ impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for MenuBarState {
 
 impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuBarState {
     fn handle(&mut self, event: &crossterm::event::Event, _qualifier: FocusKeys) -> MenuOutcome {
-        let old_selected = self.menu.selected();
-        let r = if self.menu.is_focused() {
-            self.menu.handle(event, FocusKeys)
+        if self.menu.is_focused() {
+            match self.menu.handle(event, FocusKeys) {
+                r @ MenuOutcome::Selected(_) => {
+                    self.popup_active = !self.popup_active;
+                    r
+                }
+                r => r,
+            }
         } else {
             self.menu.handle(event, MouseOnly)
-        };
-        match r {
-            MenuOutcome::Selected(n) => {
-                if old_selected == Some(n) {
-                    self.popup_active = !self.popup_active;
-                }
-            }
-            _ => {}
-        };
-        r
+        }
     }
 }
 
@@ -326,17 +322,14 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for MenuBarSta
             MenuOutcome::NotUsed
         });
 
-        let old_selected = self.menu.selected();
-        let r = self.menu.handle(event, MouseOnly);
-        match r {
-            MenuOutcome::Selected(n) => {
-                if old_selected == Some(n) {
-                    self.popup_active = !self.popup_active;
-                }
+        flow!(match self.menu.handle(event, MouseOnly) {
+            r @ MenuOutcome::Selected(_) => {
+                self.popup_active = !self.popup_active;
+                r
             }
-            _ => {}
-        };
+            r => r,
+        });
 
-        r
+        MenuOutcome::NotUsed
     }
 }
