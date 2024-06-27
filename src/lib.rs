@@ -31,8 +31,8 @@ pub mod event {
     //!
 
     pub use rat_event::{
-        crossterm, ct_event, flow, flow_ok, util, ConsumedEvent, FocusKeys, HandleEvent, MouseOnly,
-        Outcome, Popup,
+        crossterm, ct_event, flow, flow_ok, util, ConsumedEvent, Dialog, FocusKeys, HandleEvent,
+        MouseOnly, Outcome, Popup,
     };
 
     /// Runs only the navigation events, not any editing.
