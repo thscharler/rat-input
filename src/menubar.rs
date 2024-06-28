@@ -330,9 +330,14 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuBarSta
         }
 
         if self.menu.is_focused() {
+            let old_selected = self.menu.selected();
             match self.menu.handle(event, FocusKeys) {
-                r @ MenuOutcome::Selected(_) => {
-                    self.popup.flip_active();
+                r @ MenuOutcome::Selected(n) => {
+                    if self.menu.selected == old_selected {
+                        self.popup.flip_active();
+                    } else {
+                        self.popup.set_active(true);
+                    }
                     r
                 }
                 r => r,
@@ -363,10 +368,15 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for MenuBarSta
             MenuOutcome::NotUsed
         });
 
+        let old_selected = self.menu.selected();
         let r = self.menu.handle(event, MouseOnly);
         match r {
             MenuOutcome::Selected(_) => {
-                self.popup.flip_active();
+                if self.menu.selected == old_selected {
+                    self.popup.flip_active();
+                } else {
+                    self.popup.set_active(true);
+                }
             }
             _ => {}
         };
