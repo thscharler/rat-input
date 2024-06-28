@@ -45,7 +45,7 @@ pub fn layout_dialog<const N: usize>(
         .flex(Flex::Center)
         .split(l_vertical[0])[0];
 
-    let l_inner = l_dialog.inner(&insets);
+    let l_inner = l_dialog.inner(insets);
 
     let l_content = Layout::vertical([
         Constraint::Fill(1),
