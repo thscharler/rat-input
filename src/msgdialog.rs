@@ -5,7 +5,7 @@
 use crate::_private::NonExhaustive;
 use crate::button::{Button, ButtonOutcome, ButtonState, ButtonStyle};
 use crate::layout::layout_dialog;
-use rat_event::{ct_event, ConsumedEvent, FocusKeys, HandleEvent, Outcome};
+use rat_event::{ct_event, ConsumedEvent, Dialog, FocusKeys, HandleEvent, Outcome};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Flex, Margin, Rect};
 use ratatui::style::Style;
@@ -83,6 +83,14 @@ impl Default for MsgDialogStyle {
 }
 
 impl MsgDialogState {
+    pub fn set_active(&mut self, active: bool) {
+        self.active = active;
+    }
+
+    pub fn active(&self) -> bool {
+        self.active
+    }
+
     /// Clear message text, set active to false.
     pub fn clear(&mut self) {
         self.active = false;
@@ -169,8 +177,8 @@ fn render_ref(widget: &MsgDialog, area: Rect, buf: &mut Buffer, state: &mut MsgD
     }
 }
 
-impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MsgDialogState {
-    fn handle(&mut self, event: &crossterm::event::Event, _: FocusKeys) -> Outcome {
+impl HandleEvent<crossterm::event::Event, Dialog, Outcome> for MsgDialogState {
+    fn handle(&mut self, event: &crossterm::event::Event, _: Dialog) -> Outcome {
         if self.active {
             match self.button.handle(event, FocusKeys) {
                 ButtonOutcome::Pressed => {
@@ -196,4 +204,12 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, Outcome> for MsgDialogState
             Outcome::NotUsed
         }
     }
+}
+
+/// Handle events for the MsgDialog.
+pub fn handle_dialog_events(
+    state: &mut MsgDialogState,
+    event: &crossterm::event::Event,
+) -> Outcome {
+    state.handle(event, Dialog)
 }
