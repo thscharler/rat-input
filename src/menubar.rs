@@ -332,7 +332,7 @@ impl HandleEvent<crossterm::event::Event, FocusKeys, MenuOutcome> for MenuBarSta
         if self.menu.is_focused() {
             let old_selected = self.menu.selected();
             match self.menu.handle(event, FocusKeys) {
-                r @ MenuOutcome::Selected(n) => {
+                r @ MenuOutcome::Selected(_) => {
                     if self.menu.selected == old_selected {
                         self.popup.flip_active();
                     } else {
