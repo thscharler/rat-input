@@ -1,30 +1,18 @@
-use anyhow::anyhow;
+use crate::mini_salsa::{run_ui, setup_logging, MiniSalsaState};
 use chrono::{Local, NaiveTime};
-use crossterm::cursor::{DisableBlinking, EnableBlinking, SetCursorStyle};
-use crossterm::event::{
-    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, Event,
-    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
-};
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-};
-use crossterm::ExecutableCommand;
+use crossterm::event::{Event, KeyModifiers, MouseEvent, MouseEventKind};
 use format_num_pattern::NumberFormat;
-use log::debug;
 use rat_event::ct_event;
 use rat_event::util::MouseFlags;
 use rat_input::event::Outcome;
 use rat_input::layout::layout_grid;
-use ratatui::backend::CrosstermBackend;
-use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Widget;
 use ratatui::style::{Style, Stylize};
 use ratatui::text::Span;
-use ratatui::{Frame, Terminal};
-use std::fs;
-use std::io::{stdout, Stdout};
-use std::time::Duration;
+use ratatui::Frame;
+
+mod mini_salsa;
 
 fn main() -> Result<(), anyhow::Error> {
     setup_logging()?;
@@ -41,24 +29,7 @@ fn main() -> Result<(), anyhow::Error> {
         drag_pos: None,
     };
 
-    run_ui(&mut data, &mut state)
-}
-
-fn setup_logging() -> Result<(), anyhow::Error> {
-    _ = fs::remove_file("log.log");
-    fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "[{} {} {}]\n",
-                record.level(),
-                record.target(),
-                message
-            ))
-        })
-        .level(log::LevelFilter::Debug)
-        .chain(fern::log_file("log.log")?)
-        .apply()?;
-    Ok(())
+    run_ui(handle_buttons, repaint_buttons, &mut data, &mut state)
 }
 
 struct Data {
@@ -73,112 +44,11 @@ struct State {
     pub(crate) drag_pos: Option<(u16, u16)>,
 }
 
-fn run_ui(data: &mut Data, state: &mut State) -> Result<(), anyhow::Error> {
-    stdout().execute(EnterAlternateScreen)?;
-    stdout().execute(EnableMouseCapture)?;
-    stdout().execute(EnableBlinking)?;
-    stdout().execute(SetCursorStyle::BlinkingBar)?;
-    stdout().execute(EnableBracketedPaste)?;
-    enable_raw_mode()?;
-
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    terminal.clear()?;
-
-    repaint_ui(&mut terminal, data, state)?;
-
-    let r = 'l: loop {
-        let o = match crossterm::event::poll(Duration::from_millis(10)) {
-            Ok(true) => {
-                let event = match crossterm::event::read() {
-                    Ok(v) => v,
-                    Err(e) => break 'l Err(anyhow!(e)),
-                };
-                match handle_event(event, data, state) {
-                    Ok(v) => v,
-                    Err(e) => break 'l Err(e),
-                }
-            }
-            Ok(false) => continue,
-            Err(e) => break 'l Err(anyhow!(e)),
-        };
-
-        match o {
-            Outcome::Changed => {
-                match repaint_ui(&mut terminal, data, state) {
-                    Ok(_) => {}
-                    Err(e) => break 'l Err(e),
-                };
-            }
-            _ => {
-                // noop
-            }
-        }
-    };
-
-    disable_raw_mode()?;
-    stdout().execute(DisableBracketedPaste)?;
-    stdout().execute(SetCursorStyle::DefaultUserShape)?;
-    stdout().execute(DisableBlinking)?;
-    stdout().execute(DisableMouseCapture)?;
-    stdout().execute(LeaveAlternateScreen)?;
-
-    r
-}
-
-fn repaint_ui(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    data: &mut Data,
-    state: &mut State,
-) -> Result<(), anyhow::Error> {
-    terminal.hide_cursor()?;
-
-    _ = terminal.draw(|frame| {
-        debug!("{:?}", repaint_tui(frame, data, state));
-    });
-
-    Ok(())
-}
-
-fn repaint_tui(
-    frame: &mut Frame<'_>,
-    data: &mut Data,
-    state: &mut State,
-) -> Result<(), anyhow::Error> {
-    let area = frame.size();
-    let buffer = frame.buffer_mut();
-
-    repaint_buttons(area, buffer, data, state)?;
-    Ok(())
-}
-
-fn handle_event(
-    event: Event,
-    data: &mut Data,
-    state: &mut State,
-) -> Result<Outcome, anyhow::Error> {
-    use crossterm::event::Event;
-    match event {
-        Event::Key(KeyEvent {
-            code: KeyCode::Char('q'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            ..
-        }) => {
-            return Err(anyhow!("quit"));
-        }
-        Event::Resize(_, _) => return Ok(Outcome::Changed),
-        _ => {}
-    }
-
-    let r = handle_buttons(&event, data, state)?;
-
-    Ok(r)
-}
-
 fn repaint_buttons(
+    frame: &mut Frame<'_>,
     area: Rect,
-    buf: &mut Buffer,
     data: &mut Data,
+    _istate: &mut MiniSalsaState,
     state: &mut State,
 ) -> Result<(), anyhow::Error> {
     let l = layout_grid::<4, 5>(
@@ -200,15 +70,21 @@ fn repaint_buttons(
 
     if state.flip2 {
         if state.flip {
-            buf.set_style(l[1][2], Style::new().on_white());
+            frame
+                .buffer_mut()
+                .set_style(l[1][2], Style::new().on_white());
         } else {
-            buf.set_style(l[1][2], Style::new().on_red());
+            frame.buffer_mut().set_style(l[1][2], Style::new().on_red());
         }
     } else {
         if state.flip {
-            buf.set_style(l[1][2], Style::new().on_green());
+            frame
+                .buffer_mut()
+                .set_style(l[1][2], Style::new().on_green());
         } else {
-            buf.set_style(l[1][2], Style::new().on_blue());
+            frame
+                .buffer_mut()
+                .set_style(l[1][2], Style::new().on_blue());
         }
     }
     state.area = l[1][2];
@@ -224,7 +100,7 @@ fn repaint_buttons(
                 )
                 .to_string(),
             );
-            drag.render(l[3][2], buf);
+            drag.render(l[3][2], frame.buffer_mut());
         }
     }
 
@@ -252,7 +128,7 @@ fn repaint_buttons(
                 )
                 .to_string(),
             );
-            msg.render(row_area, buf);
+            msg.render(row_area, frame.buffer_mut());
 
             prev_time = time.clone();
         }
@@ -264,6 +140,7 @@ fn repaint_buttons(
 fn handle_buttons(
     event: &Event,
     data: &mut Data,
+    _istate: &mut MiniSalsaState,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let r1 = match event {

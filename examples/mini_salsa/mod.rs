@@ -1,3 +1,5 @@
+#![allow(unreachable_pub)]
+
 use anyhow::anyhow;
 use crossterm::cursor::{DisableBlinking, EnableBlinking, SetCursorStyle};
 use crossterm::event::{
@@ -8,8 +10,10 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
-use rat_event::{FocusKeys, HandleEvent, Outcome};
+use log::error;
+use rat_event::{ConsumedEvent, Outcome};
 use rat_input::button::ButtonStyle;
+use rat_input::msgdialog;
 use rat_input::msgdialog::{MsgDialog, MsgDialogState};
 use rat_input::statusline::{StatusLine, StatusLineState};
 use ratatui::backend::CrosstermBackend;
@@ -21,20 +25,36 @@ use std::fs;
 use std::io::{stdout, Stdout};
 use std::time::{Duration, SystemTime};
 
-#[derive(Default)]
-pub struct InternState {
+pub struct MiniSalsaState {
     pub status: StatusLineState,
     pub msg: MsgDialogState,
+}
+
+impl Default for MiniSalsaState {
+    fn default() -> Self {
+        let mut s = Self {
+            status: Default::default(),
+            msg: Default::default(),
+        };
+        s.status.status(0, "Ctrl-Q to quit.");
+        s
+    }
 }
 
 pub fn run_ui<Data, State>(
     handle: fn(
         &crossterm::event::Event,
         data: &mut Data,
-        istate: &mut InternState,
+        istate: &mut MiniSalsaState,
         state: &mut State,
     ) -> Result<Outcome, anyhow::Error>,
-    repaint: fn(&mut Frame<'_>, Rect, &mut Data, &mut InternState, &mut State),
+    repaint: fn(
+        &mut Frame<'_>,
+        Rect,
+        &mut Data,
+        &mut MiniSalsaState,
+        &mut State,
+    ) -> Result<(), anyhow::Error>,
     data: &mut Data,
     state: &mut State,
 ) -> Result<(), anyhow::Error> {
@@ -48,7 +68,7 @@ pub fn run_ui<Data, State>(
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
-    let mut istate = InternState::default();
+    let mut istate = MiniSalsaState::default();
 
     repaint_ui(&mut terminal, repaint, data, &mut istate, state)?;
 
@@ -93,15 +113,26 @@ pub fn run_ui<Data, State>(
 
 fn repaint_ui<Data, State>(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    repaint: fn(&mut Frame<'_>, Rect, &mut Data, &mut InternState, &mut State),
+    repaint: fn(
+        &mut Frame<'_>,
+        Rect,
+        &mut Data,
+        &mut MiniSalsaState,
+        &mut State,
+    ) -> Result<(), anyhow::Error>,
     data: &mut Data,
-    istate: &mut InternState,
+    istate: &mut MiniSalsaState,
     state: &mut State,
 ) -> Result<(), anyhow::Error> {
     terminal.hide_cursor()?;
 
     _ = terminal.draw(|frame| {
-        repaint_tui(frame, repaint, data, istate, state);
+        match repaint_tui(frame, repaint, data, istate, state) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("{:?}", e)
+            }
+        };
     });
 
     Ok(())
@@ -109,17 +140,23 @@ fn repaint_ui<Data, State>(
 
 fn repaint_tui<Data, State>(
     frame: &mut Frame<'_>,
-    repaint: fn(&mut Frame<'_>, Rect, &mut Data, &mut InternState, &mut State),
+    repaint: fn(
+        &mut Frame<'_>,
+        Rect,
+        &mut Data,
+        &mut MiniSalsaState,
+        &mut State,
+    ) -> Result<(), anyhow::Error>,
     data: &mut Data,
-    istate: &mut InternState,
+    istate: &mut MiniSalsaState,
     state: &mut State,
-) {
+) -> Result<(), anyhow::Error> {
     let t0 = SystemTime::now();
     let area = frame.size();
 
     let l1 = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(area);
 
-    repaint(frame, l1[0], data, istate, state);
+    repaint(frame, l1[0], data, istate, state)?;
 
     let status1 = StatusLine::new()
         .layout([
@@ -148,18 +185,20 @@ fn repaint_tui<Data, State>(
         .status
         .status(1, format!("Render {:?}", el).to_string());
     frame.render_stateful_widget(status1, l1[1], &mut istate.status);
+
+    Ok(())
 }
 
 fn handle_event<Data, State>(
     handle: fn(
         &crossterm::event::Event,
         data: &mut Data,
-        istate: &mut InternState,
+        istate: &mut MiniSalsaState,
         state: &mut State,
     ) -> Result<Outcome, anyhow::Error>,
     event: crossterm::event::Event,
     data: &mut Data,
-    istate: &mut InternState,
+    istate: &mut MiniSalsaState,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
     let t0 = SystemTime::now();
@@ -179,9 +218,11 @@ fn handle_event<Data, State>(
             _ => {}
         }
 
-        if istate.msg.active {
-            let r = istate.msg.handle(&event, FocusKeys);
-            break 'h r;
+        if istate.msg.active() {
+            let r = msgdialog::handle_dialog_events(&mut istate.msg, &event);
+            if r.is_consumed() {
+                break 'h r;
+            }
         }
 
         let r = handle(&event, data, istate, state)?;

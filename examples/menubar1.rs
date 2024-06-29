@@ -1,31 +1,14 @@
-use crate::mini_salsa::InternState;
+use crate::mini_salsa::MiniSalsaState;
 use anyhow::anyhow;
-use crossterm::cursor::{DisableBlinking, EnableBlinking, SetCursorStyle};
-use crossterm::event::{
-    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, KeyCode,
-    KeyEvent, KeyEventKind, KeyModifiers,
-};
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-};
-use crossterm::ExecutableCommand;
-use log::debug;
-use rat_event::Popup;
-use rat_input::button::ButtonStyle;
-use rat_input::event::{FocusKeys, HandleEvent, Outcome};
+use rat_event::{flow_ok, Outcome};
+use rat_input::menubar;
 use rat_input::menubar::{MenuBar, MenuBarState, MenuPopup, StaticMenu};
 use rat_input::menuline::MenuOutcome;
-use rat_input::msgdialog::{MsgDialog, MsgDialogState};
 use rat_input::popup_menu::Placement;
-use rat_input::statusline::{StatusLine, StatusLineState};
-use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
 use ratatui::widgets::{Block, StatefulWidget};
-use ratatui::{Frame, Terminal};
-use std::fs;
-use std::io::{stdout, Stdout};
-use std::time::{Duration, SystemTime};
+use ratatui::Frame;
 
 mod mini_salsa;
 
@@ -60,9 +43,9 @@ fn repaint_input(
     frame: &mut Frame<'_>,
     area: Rect,
     _data: &mut Data,
-    _istate: &mut InternState,
+    _istate: &mut MiniSalsaState,
     state: &mut State,
-) {
+) -> Result<(), anyhow::Error> {
     let l1 = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(area);
 
     MenuBar::new()
@@ -83,32 +66,35 @@ fn repaint_input(
         .focus_style(Style::default().black().on_cyan())
         .placement(Placement::Top)
         .render(l1[1], frame.buffer_mut(), &mut state.menu);
+
+    Ok(())
 }
 
 fn handle_input(
     event: &crossterm::event::Event,
     _data: &mut Data,
-    istate: &mut InternState,
+    istate: &mut MiniSalsaState,
     state: &mut State,
 ) -> Result<Outcome, anyhow::Error> {
-    let r = HandleEvent::handle(&mut state.menu, event, Popup);
-    debug!("{:?}", r);
-    match r {
-        MenuOutcome::MenuSelected(v, w) => {
-            istate.status.status(0, format!("Selected {}-{}", v, w));
+    flow_ok!(
+        match menubar::handle_popup_events(&mut state.menu, true, event) {
+            MenuOutcome::MenuSelected(v, w) => {
+                istate.status.status(0, format!("Selected {}-{}", v, w));
+                Outcome::Changed
+            }
+            MenuOutcome::MenuActivated(v, w) => {
+                istate.status.status(0, format!("Activated {}-{}", v, w));
+                state.menu.set_popup_active(false);
+                Outcome::Changed
+            }
+            r => r.into(),
         }
-        MenuOutcome::MenuActivated(v, w) => {
-            istate.status.status(0, format!("Activated {}-{}", v, w));
-            state.menu.set_popup_active(false);
-        }
-        _ => {}
-    };
+    );
 
-    let s = HandleEvent::handle(&mut state.menu, event, FocusKeys);
-    debug!("{:?}", s);
-    match s {
+    flow_ok!(match menubar::handle_events(&mut state.menu, true, event) {
         MenuOutcome::Selected(v) => {
             istate.status.status(0, format!("Selected {}", v));
+            Outcome::Changed
         }
         MenuOutcome::Activated(v) => {
             istate.status.status(0, format!("Activated {}", v));
@@ -116,9 +102,12 @@ fn handle_input(
                 3 => return Err(anyhow!("Quit")),
                 _ => {}
             }
+            Outcome::Changed
         }
-        _ => {}
-    };
+        r => {
+            r.into()
+        }
+    });
 
-    Ok(Outcome::from(s) | Outcome::from(r))
+    Ok(Outcome::NotUsed)
 }
