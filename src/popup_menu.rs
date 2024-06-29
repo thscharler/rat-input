@@ -63,6 +63,7 @@ pub struct PopupMenu<'a> {
 
     width: Option<u16>,
     placement: Placement,
+    boundary: Option<Rect>,
 
     style: Style,
     focus_style: Option<Style>,
@@ -203,6 +204,13 @@ impl<'a> PopupMenu<'a> {
         self
     }
 
+    /// Set outer bounds for the popup-menu.
+    /// If not used, the buffer-area is used as outer bounds.
+    pub fn boundary(mut self, boundary: Rect) -> Self {
+        self.boundary = Some(boundary);
+        self
+    }
+
     /// Take a style-set.
     pub fn styles(mut self, styles: MenuStyle) -> Self {
         self.style = styles.style;
@@ -253,7 +261,13 @@ fn render_ref(widget: &PopupMenu<'_>, area: Rect, buf: &mut Buffer, state: &mut 
 
     state.navchar = widget.navchar.clone();
 
-    widget.layout(area, buf.area, state);
+    let fit_in = if let Some(boundary) = widget.boundary {
+        boundary
+    } else {
+        buf.area
+    };
+
+    widget.layout(area, fit_in, state);
 
     Fill::new().style(widget.style).render(state.area, buf);
     widget.block.render_ref(state.area, buf);
@@ -401,7 +415,7 @@ impl PopupMenuState {
 
 impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for PopupMenuState {
     fn handle(&mut self, event: &crossterm::event::Event, _qualifier: Popup) -> MenuOutcome {
-        let res = if self.is_focused() {
+        let res = if self.active() {
             match event {
                 ct_event!(key press ANY-c) => self.navigate(*c),
                 ct_event!(keycode press Up) => {
@@ -432,8 +446,13 @@ impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for PopupMenuState
                         MenuOutcome::Unchanged
                     }
                 }
+                ct_event!(keycode press Esc) => {
+                    self.set_active(false);
+                    MenuOutcome::Changed
+                }
                 ct_event!(keycode press Enter) => {
                     if let Some(select) = self.selected {
+                        self.set_active(false);
                         MenuOutcome::Activated(select)
                     } else {
                         MenuOutcome::NotUsed
@@ -445,6 +464,7 @@ impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for PopupMenuState
                 | ct_event!(keycode release Down)
                 | ct_event!(keycode release Home)
                 | ct_event!(keycode release End)
+                | ct_event!(keycode release Esc)
                 | ct_event!(keycode release Enter) => MenuOutcome::Unchanged,
 
                 _ => MenuOutcome::NotUsed,
@@ -463,22 +483,29 @@ impl HandleEvent<crossterm::event::Event, Popup, MenuOutcome> for PopupMenuState
 
 impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for PopupMenuState {
     fn handle(&mut self, event: &crossterm::event::Event, _: MouseOnly) -> MenuOutcome {
-        match event {
-            ct_event!(mouse moved for col, row) if self.area.contains((*col, *row).into()) => {
-                if self.select_at((*col, *row)) {
-                    MenuOutcome::Selected(self.selected().expect("selection"))
-                } else {
-                    MenuOutcome::Unchanged
+        if self.active() {
+            match event {
+                ct_event!(mouse moved for col, row) if self.area.contains((*col, *row).into()) => {
+                    if self.select_at((*col, *row)) {
+                        MenuOutcome::Selected(self.selected().expect("selection"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
-            }
-            ct_event!(mouse down Left for col, row) if self.area.contains((*col, *row).into()) => {
-                if self.select_at((*col, *row)) {
-                    MenuOutcome::Activated(self.selected().expect("selection"))
-                } else {
-                    MenuOutcome::Unchanged
+                ct_event!(mouse down Left for col, row)
+                    if self.area.contains((*col, *row).into()) =>
+                {
+                    if self.select_at((*col, *row)) {
+                        self.set_active(false);
+                        MenuOutcome::Activated(self.selected().expect("selection"))
+                    } else {
+                        MenuOutcome::Unchanged
+                    }
                 }
+                _ => MenuOutcome::NotUsed,
             }
-            _ => MenuOutcome::NotUsed,
+        } else {
+            MenuOutcome::NotUsed
         }
     }
 }
@@ -486,7 +513,10 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, MenuOutcome> for PopupMenuS
 /// Handle all events.
 /// The assumption is, the popup-menu is focused or it is hidden.
 /// This state must be handled outside of this widget.
-pub fn handle_events(state: &mut PopupMenuState, event: &crossterm::event::Event) -> MenuOutcome {
+pub fn handle_popup_events(
+    state: &mut PopupMenuState,
+    event: &crossterm::event::Event,
+) -> MenuOutcome {
     state.handle(event, Popup)
 }
 
