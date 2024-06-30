@@ -10,12 +10,12 @@ use log::debug;
 use rat_event::util::MouseFlags;
 use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
 use rat_focus::{FocusFlag, HasFocusFlag};
-use rat_scrolled::{ScrollingState, ScrollingWidget};
+use rat_scrolled::{layout_scroll, Scroll, ScrollState};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::prelude::{BlockExt, Stylize};
+use ratatui::prelude::Stylize;
 use ratatui::style::Style;
-use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, Widget};
+use ratatui::widgets::{Block, StatefulWidget, StatefulWidgetRef, WidgetRef};
 use ropey::{Rope, RopeSlice};
 use std::cmp::{max, min};
 
@@ -57,6 +57,9 @@ use std::cmp::{max, min};
 #[derive(Debug, Default, Clone)]
 pub struct TextArea<'a> {
     block: Option<Block<'a>>,
+    hscroll: Option<Scroll<'a>>,
+    vscroll: Option<Scroll<'a>>,
+
     style: Style,
     focus_style: Option<Style>,
     select_style: Option<Style>,
@@ -84,6 +87,11 @@ pub struct TextAreaState {
     pub inner: Rect,
     /// Text edit core
     pub value: core::InputCore,
+
+    /// Horizontal scroll
+    pub hscroll: ScrollState,
+    pub vscroll: ScrollState,
+
     /// Helper for mouse.
     pub mouse: MouseFlags,
 
@@ -148,14 +156,33 @@ impl<'a> TextArea<'a> {
         self.block = Some(block);
         self
     }
-}
 
-impl<'a> ScrollingWidget<TextAreaState> for TextArea<'a> {
-    fn need_scroll(&self, area: Rect, state: &mut TextAreaState) -> (bool, bool) {
-        let sy = state.line_len() > area.height as usize;
-        (true, sy)
+    /// Scrollbars
+    pub fn scroll(mut self, scroll: Scroll<'a>) -> Self {
+        self.hscroll = Some(scroll.clone().override_horizontal());
+        self.vscroll = Some(scroll.override_vertical());
+        self
+    }
+
+    /// Scrollbars
+    pub fn hscroll(mut self, scroll: Scroll<'a>) -> Self {
+        self.hscroll = Some(scroll.override_horizontal());
+        self
+    }
+
+    /// Scrollbars
+    pub fn vscroll(mut self, scroll: Scroll<'a>) -> Self {
+        self.vscroll = Some(scroll.override_vertical());
+        self
     }
 }
+
+// impl<'a> ScrollingWidget<TextAreaState> for TextArea<'a> {
+//     fn need_scroll(&self, area: Rect, state: &mut TextAreaState) -> (bool, bool) {
+//         let sy = state.line_len() > area.height as usize;
+//         (true, sy)
+//     }
+// }
 
 impl<'a> StatefulWidgetRef for TextArea<'a> {
     type State = TextAreaState;
@@ -175,11 +202,28 @@ impl<'a> StatefulWidget for TextArea<'a> {
 
 fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut TextAreaState) {
     state.area = area;
-    state.inner = widget.block.inner_if_some(area);
 
-    widget.block.render(area, buf);
+    let (hscroll_area, vscroll_area, inner_area) = layout_scroll(
+        area,
+        widget.block.as_ref(),
+        widget.hscroll.as_ref(),
+        widget.vscroll.as_ref(),
+    );
+    state.inner = inner_area;
+    state.hscroll.max_offset = usize::MAX;
+    state.hscroll.page_len = state.inner.width as usize;
+    state.vscroll.max_offset = state.line_len().saturating_sub(state.inner.height as usize);
+    state.vscroll.page_len = state.inner.height as usize;
 
-    let area = state.area.intersection(buf.area);
+    widget.block.render_ref(area, buf);
+    if let Some(hscroll) = widget.hscroll.as_ref() {
+        hscroll.render_ref(hscroll_area, buf, &mut state.hscroll);
+    }
+    if let Some(vscroll) = widget.vscroll.as_ref() {
+        vscroll.render_ref(vscroll_area, buf, &mut state.vscroll);
+    }
+
+    let area = state.inner;
 
     let select_style = if let Some(select_style) = widget.select_style {
         select_style
@@ -193,7 +237,9 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
     let selection = state.selection();
     let mut styles = Vec::new();
 
-    let mut line_iter = state.value.iter_scrolled();
+    let mut line_iter = state
+        .value
+        .iter_scrolled((state.hscroll.offset, state.vscroll.offset));
     for row in 0..area.height {
         if let Some(mut line) = line_iter.next() {
             let mut col = 0;
@@ -272,7 +318,9 @@ impl Default for TextAreaState {
             inner: Default::default(),
             mouse: Default::default(),
             value: core::InputCore::default(),
+            hscroll: Default::default(),
             non_exhaustive: NonExhaustive,
+            vscroll: Default::default(),
         }
     }
 }
@@ -303,13 +351,15 @@ impl TextAreaState {
     /// Current offset for scrolling.
     #[inline]
     pub fn offset(&self) -> (usize, usize) {
-        self.value.offset()
+        (self.hscroll.offset(), self.vscroll.offset)
     }
 
     /// Set the offset for scrolling.
     #[inline]
     pub fn set_offset(&mut self, offset: (usize, usize)) -> bool {
-        self.value.set_offset(offset)
+        let c = self.hscroll.set_offset(offset.0);
+        let r = self.vscroll.set_offset(offset.1);
+        r || c
     }
 
     /// Cursor position.
@@ -360,6 +410,9 @@ impl TextAreaState {
     /// Resets all internal state.
     #[inline]
     pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
+        self.vscroll = Default::default();
+        self.hscroll = Default::default();
+
         self.value.set_value(s);
     }
 
@@ -367,6 +420,9 @@ impl TextAreaState {
     /// Resets all internal state.
     #[inline]
     pub fn set_value_rope(&mut self, s: Rope) {
+        self.vscroll = Default::default();
+        self.hscroll = Default::default();
+
         self.value.set_value_rope(s);
     }
 
@@ -751,7 +807,7 @@ impl TextAreaState {
 
     /// Move the cursor to the start of the visible area.
     pub fn move_to_screen_start(&mut self, extend_selection: bool) -> bool {
-        let (ox, oy) = self.value.offset();
+        let (ox, oy) = self.offset();
 
         let cx = ox;
         let cy = oy;
@@ -763,7 +819,7 @@ impl TextAreaState {
 
     /// Move the cursor to the end of the visible area.
     pub fn move_to_screen_end(&mut self, extend_selection: bool) -> bool {
-        let (ox, oy) = self.value.offset();
+        let (ox, oy) = self.offset();
         let len = self.value.len_lines();
 
         let cx = ox;
@@ -805,7 +861,7 @@ impl TextAreaState {
     /// x is the relative screen position.
     pub fn from_screen_col(&self, row: usize, x: usize) -> Option<usize> {
         let (mut cx, cy) = (0usize, row);
-        let (ox, _oy) = self.value.offset();
+        let (ox, _oy) = self.offset();
 
         let line = self.line(cy)?;
         let mut test = 0;
@@ -830,7 +886,7 @@ impl TextAreaState {
     /// relative to the widget area.
     pub fn to_screen_col(&self, pos: (usize, usize)) -> Option<u16> {
         let (px, py) = pos;
-        let (ox, _oy) = self.value.offset();
+        let (ox, _oy) = self.offset();
 
         let mut sx = 0;
         let line = self.line(py)?;
@@ -849,7 +905,7 @@ impl TextAreaState {
     pub fn screen_cursor(&self) -> Option<(u16, u16)> {
         if self.is_focused() {
             let (cx, cy) = self.value.cursor();
-            let (ox, oy) = self.value.offset();
+            let (ox, oy) = self.offset();
 
             if cy < oy {
                 None
@@ -879,7 +935,7 @@ impl TextAreaState {
     /// to a position that is currently scrolled away.
     pub fn set_screen_cursor(&mut self, cursor: (i16, i16), extend_selection: bool) -> bool {
         let (scx, scy) = (cursor.0 as isize, cursor.1 as isize);
-        let (ox, oy) = self.value.offset();
+        let (ox, oy) = self.offset();
 
         let cy = min(max(oy as isize + scy, 0) as usize, self.line_len() - 1);
         let cx = if scx < 0 {
@@ -898,52 +954,50 @@ impl TextAreaState {
     }
 }
 
-impl ScrollingState for TextAreaState {
+impl TextAreaState {
     /// Maximum offset that is accessible with scrolling.
     ///
     /// This is shorter than the length of the content by whatever fills the last page.
     /// This is the base for the scrollbar content_length.
-    fn vertical_max_offset(&self) -> usize {
-        self.value
-            .len_lines()
-            .saturating_sub(self.inner.height as usize)
+    pub fn vertical_max_offset(&self) -> usize {
+        self.vscroll.max_offset
     }
 
     /// Current vertical offset.
-    fn vertical_offset(&self) -> usize {
-        self.value.offset().1
+    pub fn vertical_offset(&self) -> usize {
+        self.vscroll.offset
     }
 
     /// Vertical page-size at the current offset.
-    fn vertical_page(&self) -> usize {
-        self.inner.height as usize
+    pub fn vertical_page(&self) -> usize {
+        self.vscroll.page_len
     }
 
     /// Suggested scroll per scroll-event.
-    fn vertical_scroll(&self) -> usize {
-        max(self.vertical_page() / 10, 1)
+    pub fn vertical_scroll(&self) -> usize {
+        self.vscroll.scroll_by()
     }
 
     /// Maximum offset that is accessible with scrolling.
     ///
     /// This is currently set to usize::MAX.
-    fn horizontal_max_offset(&self) -> usize {
-        usize::MAX
+    pub fn horizontal_max_offset(&self) -> usize {
+        self.hscroll.max_offset
     }
 
     /// Current horizontal offset.
-    fn horizontal_offset(&self) -> usize {
-        self.value.offset().0
+    pub fn horizontal_offset(&self) -> usize {
+        self.hscroll.offset
     }
 
     /// Horizontal page-size at the current offset.
-    fn horizontal_page(&self) -> usize {
-        self.inner.width as usize
+    pub fn horizontal_page(&self) -> usize {
+        self.hscroll.page_len
     }
 
     /// Suggested scroll per scroll-event.
-    fn horizontal_scroll(&self) -> usize {
-        max(self.horizontal_page() / 10, 1)
+    pub fn horizontal_scroll(&self) -> usize {
+        self.hscroll.scroll_by()
     }
 
     /// Change the vertical offset.
@@ -953,12 +1007,8 @@ impl ScrollingState for TextAreaState {
     ///
     /// The widget returns true if the offset changed at all.
     #[allow(unused_assignments)]
-    fn set_vertical_offset(&mut self, row_offset: usize) -> bool {
-        let (ox, mut oy) = self.value.offset();
-
-        oy = min(row_offset, self.vertical_max_offset());
-
-        self.value.set_offset((ox, oy))
+    pub fn set_vertical_offset(&mut self, row_offset: usize) -> bool {
+        self.vscroll.set_offset(row_offset)
     }
 
     /// Change the horizontal offset.
@@ -968,12 +1018,35 @@ impl ScrollingState for TextAreaState {
     ///
     /// The widget returns true if the offset changed at all.
     #[allow(unused_assignments)]
-    fn set_horizontal_offset(&mut self, col_offset: usize) -> bool {
-        let (mut ox, oy) = self.value.offset();
+    pub fn set_horizontal_offset(&mut self, col_offset: usize) -> bool {
+        self.hscroll.set_offset(col_offset)
+    }
 
-        ox = col_offset;
+    /// Scroll to position.
+    pub fn scroll_to_row(&mut self, pos: usize) -> bool {
+        self.vscroll.set_offset(pos)
+    }
 
-        self.value.set_offset((ox, oy))
+    /// Scroll to position.
+    pub fn scroll_to_col(&mut self, pos: usize) -> bool {
+        self.hscroll.set_offset(pos)
+    }
+
+    pub fn scroll_up(&mut self, delta: usize) -> bool {
+        self.vscroll.change_offset(-(delta as isize))
+    }
+
+    pub fn scroll_down(&mut self, delta: usize) -> bool {
+        self.vscroll.change_offset(delta as isize)
+    }
+
+    pub fn scroll_left(&mut self, delta: usize) -> bool {
+        self.hscroll.change_offset(-(delta as isize))
+    }
+
+    pub fn scroll_right(&mut self, delta: usize) -> bool {
+        debug!("hscroll {:?}", self.hscroll);
+        self.hscroll.change_offset(delta as isize)
     }
 }
 
@@ -981,10 +1054,10 @@ impl TextAreaState {
     /// Scroll that the cursor is visible.
     /// All move-fn do this automatically.
     fn scroll_cursor_to_visible(&mut self) -> bool {
-        let old_offset = self.value.offset();
+        let old_offset = self.offset();
 
         let (cx, cy) = self.value.cursor();
-        let (ox, oy) = self.value.offset();
+        let (ox, oy) = self.offset();
 
         let noy = if cy < oy {
             cy
@@ -1002,9 +1075,9 @@ impl TextAreaState {
             ox
         };
 
-        self.value.set_offset((nox, noy));
+        self.set_offset((nox, noy));
 
-        self.value.offset() != old_offset
+        self.offset() != old_offset
     }
 }
 
@@ -1429,7 +1502,7 @@ pub mod core {
         styles: StyleMap,
 
         /// Scroll offset
-        offset: (usize, usize),
+        // offset: (usize, usize),
 
         /// Secondary column, remembered for moving up/down.
         move_col: Option<usize>,
@@ -1801,24 +1874,24 @@ pub mod core {
             Self::default()
         }
 
-        /// Set the text offset as (col,row).
-        pub fn set_offset(&mut self, mut offset: (usize, usize)) -> bool {
-            let old_offset = self.offset;
-
-            let (ox, oy) = offset;
-            let oy = min(oy, self.len_lines() - 1);
-            offset = (ox, oy);
-
-            self.offset = offset;
-
-            self.offset != old_offset
-        }
-
-        /// Text offset as (col,row)
-        #[inline]
-        pub fn offset(&self) -> (usize, usize) {
-            self.offset
-        }
+        // /// Set the text offset as (col,row).
+        // pub fn set_offset(&mut self, mut offset: (usize, usize)) -> bool {
+        //     let old_offset = self.offset;
+        //
+        //     let (ox, oy) = offset;
+        //     let oy = min(oy, self.len_lines() - 1);
+        //     offset = (ox, oy);
+        //
+        //     self.offset = offset;
+        //
+        //     self.offset != old_offset
+        // }
+        //
+        // /// Text offset as (col,row)
+        // #[inline]
+        // pub fn offset(&self) -> (usize, usize) {
+        //     self.offset
+        // }
 
         /// Extra column information for cursor movement.
         /// The cursor position is capped to the current line length, so if you
@@ -1874,7 +1947,6 @@ pub mod core {
         /// Resets the selection and any styles.
         pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
             self.value = Rope::from_str(s.as_ref());
-            self.offset = (0, 0);
             self.cursor = (0, 0);
             self.anchor = (0, 0);
             self.move_col = None;
@@ -1886,7 +1958,6 @@ pub mod core {
         #[inline]
         pub fn set_value_rope(&mut self, s: Rope) {
             self.value = s;
-            self.offset = (0, 0);
             self.cursor = (0, 0);
             self.anchor = (0, 0);
             self.move_col = None;
@@ -2061,13 +2132,13 @@ pub mod core {
 
         /// Iterate over the text, shifted by the offset.
         #[inline]
-        pub fn iter_scrolled(&self) -> ScrolledIter<'_> {
-            let Some(l) = self.value.get_lines_at(self.offset.1) else {
-                panic!("invalid offset {:?} value {:?}", self.offset, self.value);
+        pub fn iter_scrolled(&self, offset: (usize, usize)) -> ScrolledIter<'_> {
+            let Some(l) = self.value.get_lines_at(offset.1) else {
+                panic!("invalid offset {:?} value {:?}", offset, self.value);
             };
             ScrolledIter {
                 lines: l,
-                offset: self.offset.0,
+                offset: offset.0,
             }
         }
 

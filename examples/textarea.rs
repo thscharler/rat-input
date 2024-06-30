@@ -261,7 +261,7 @@ pub(crate) fn insert_text_1(state: &mut State) {
 }
 
 pub(crate) fn insert_text_0(state: &mut State) {
-    state.textarea.value.set_value(DATA_0);
+    state.textarea.set_value(DATA_0);
 
     state.textarea.add_style(TextRange::new((0, 0), (13, 0)), 0);
     state.textarea.add_style(TextRange::new((0, 1), (13, 1)), 0);
