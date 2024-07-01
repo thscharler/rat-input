@@ -1278,61 +1278,20 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
             _ => TextOutcome::NotUsed,
         });
 
-        flow!(match self.hscroll.handle(event, MouseOnly) {
-            ScrollOutcome::Offset(v) => {
-                if self.scroll_to_col(v) {
-                    TextOutcome::Changed
-                } else {
-                    TextOutcome::NotUsed
-                }
-            }
-            _ => TextOutcome::NotUsed,
-        });
-        flow!(match self.vscroll.handle(event, MouseOnly) {
-            ScrollOutcome::Offset(v) => {
-                if self.scroll_to_row(v) {
-                    TextOutcome::Changed
-                } else {
-                    TextOutcome::NotUsed
-                }
-            }
-            _ => TextOutcome::NotUsed,
-        });
-        flow!(
-            match ScrollArea(self.inner, Some(&self.hscroll), Some(&self.vscroll))
-                .handle(event, MouseOnly)
-            {
-                ScrollOutcome::Up(v) => {
-                    if self.scroll_up(v) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::NotUsed
-                    }
-                }
-                ScrollOutcome::Down(v) => {
-                    if self.scroll_down(v) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::NotUsed
-                    }
-                }
-                ScrollOutcome::Left(v) => {
-                    if self.scroll_left(v) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::NotUsed
-                    }
-                }
-                ScrollOutcome::Right(v) => {
-                    if self.scroll_right(v) {
-                        TextOutcome::Changed
-                    } else {
-                        TextOutcome::NotUsed
-                    }
-                }
-                _ => TextOutcome::NotUsed,
-            }
-        );
+        let r = match ScrollArea(self.inner, Some(&mut self.hscroll), Some(&mut self.vscroll))
+            .handle(event, MouseOnly)
+        {
+            ScrollOutcome::Up(v) => self.scroll_up(v),
+            ScrollOutcome::Down(v) => self.scroll_down(v),
+            ScrollOutcome::Left(v) => self.scroll_left(v),
+            ScrollOutcome::Right(v) => self.scroll_right(v),
+            ScrollOutcome::VPos(v) => self.set_vertical_offset(v),
+            ScrollOutcome::HPos(v) => self.set_horizontal_offset(v),
+            _ => false,
+        };
+        if r {
+            return TextOutcome::Changed;
+        }
 
         TextOutcome::NotUsed
     }
