@@ -8,9 +8,10 @@ use rat_input::statusline::StatusLineState;
 use rat_input::textarea::core::TextRange;
 use rat_input::textarea::{TextArea, TextAreaState};
 use rat_input::{menuline, textarea};
+use rat_scrolled::Scroll;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Block, Paragraph, StatefulWidget};
 use ratatui::Frame;
 use ropey::RopeBuilder;
 use std::fmt;
@@ -63,7 +64,10 @@ fn repaint_input(
     ])
     .split(l1[1]);
 
-    let text = TextArea::new()
+    TextArea::new()
+        .block(Block::bordered().style(Style::default().gray().on_dark_gray()))
+        .scroll(Scroll::new().style(Style::default().gray().on_dark_gray()))
+        .set_horizontal_max_offset(256)
         .style(Style::default().black().on_dark_gray())
         .select_style(Style::default().black().on_yellow())
         .text_style([
@@ -71,8 +75,9 @@ fn repaint_input(
             Style::new().underlined(),
             Style::new().green(),
             Style::new().on_yellow(),
-        ]);
-    frame.render_stateful_widget(text, l2[1], &mut state.textarea);
+        ])
+        .render(l2[1], frame.buffer_mut(), &mut state.textarea);
+
     if let Some((cx, cy)) = state.textarea.screen_cursor() {
         frame.set_cursor(cx, cy);
     }

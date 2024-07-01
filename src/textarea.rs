@@ -8,9 +8,10 @@ use crossterm::event::KeyModifiers;
 #[allow(unused_imports)]
 use log::debug;
 use rat_event::util::MouseFlags;
-use rat_event::{ct_event, FocusKeys, HandleEvent, MouseOnly};
+use rat_event::{ct_event, flow, FocusKeys, HandleEvent, MouseOnly};
 use rat_focus::{FocusFlag, HasFocusFlag};
-use rat_scrolled::{layout_scroll, Scroll, ScrollState};
+use rat_scrolled::event::ScrollOutcome;
+use rat_scrolled::{layout_scroll, Scroll, ScrollArea, ScrollState};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::Stylize;
@@ -58,6 +59,7 @@ use std::cmp::{max, min};
 pub struct TextArea<'a> {
     block: Option<Block<'a>>,
     hscroll: Option<Scroll<'a>>,
+    h_max_offset: Option<usize>,
     vscroll: Option<Scroll<'a>>,
 
     style: Style,
@@ -170,19 +172,18 @@ impl<'a> TextArea<'a> {
         self
     }
 
+    /// Set a maximum horizontal offset. There is no default offset.
+    pub fn set_horizontal_max_offset(mut self, offset: usize) -> Self {
+        self.h_max_offset = Some(offset);
+        self
+    }
+
     /// Scrollbars
     pub fn vscroll(mut self, scroll: Scroll<'a>) -> Self {
         self.vscroll = Some(scroll.override_vertical());
         self
     }
 }
-
-// impl<'a> ScrollingWidget<TextAreaState> for TextArea<'a> {
-//     fn need_scroll(&self, area: Rect, state: &mut TextAreaState) -> (bool, bool) {
-//         let sy = state.line_len() > area.height as usize;
-//         (true, sy)
-//     }
-// }
 
 impl<'a> StatefulWidgetRef for TextArea<'a> {
     type State = TextAreaState;
@@ -210,10 +211,14 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
         widget.vscroll.as_ref(),
     );
     state.inner = inner_area;
-    state.hscroll.max_offset = usize::MAX;
-    state.hscroll.page_len = state.inner.width as usize;
-    state.vscroll.max_offset = state.line_len().saturating_sub(state.inner.height as usize);
-    state.vscroll.page_len = state.inner.height as usize;
+    if let Some(h_max_offset) = widget.h_max_offset {
+        state.hscroll.set_max_offset(h_max_offset);
+    }
+    state.hscroll.set_page_len(state.inner.width as usize);
+    state
+        .vscroll
+        .set_max_offset(state.line_len().saturating_sub(state.inner.height as usize));
+    state.vscroll.set_page_len(state.inner.height as usize);
 
     widget.block.render_ref(area, buf);
     if let Some(hscroll) = widget.hscroll.as_ref() {
@@ -239,7 +244,7 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
 
     let mut line_iter = state
         .value
-        .iter_scrolled((state.hscroll.offset, state.vscroll.offset));
+        .iter_scrolled((state.hscroll.offset(), state.vscroll.offset()));
     for row in 0..area.height {
         if let Some(mut line) = line_iter.next() {
             let mut col = 0;
@@ -312,7 +317,7 @@ fn render_ref(widget: &TextArea<'_>, area: Rect, buf: &mut Buffer, state: &mut T
 
 impl Default for TextAreaState {
     fn default() -> Self {
-        Self {
+        let mut s = Self {
             focus: Default::default(),
             area: Default::default(),
             inner: Default::default(),
@@ -321,7 +326,9 @@ impl Default for TextAreaState {
             hscroll: Default::default(),
             non_exhaustive: NonExhaustive,
             vscroll: Default::default(),
-        }
+        };
+        s.hscroll.set_max_offset(usize::MAX);
+        s
     }
 }
 
@@ -351,7 +358,7 @@ impl TextAreaState {
     /// Current offset for scrolling.
     #[inline]
     pub fn offset(&self) -> (usize, usize) {
-        (self.hscroll.offset(), self.vscroll.offset)
+        (self.hscroll.offset(), self.vscroll.offset())
     }
 
     /// Set the offset for scrolling.
@@ -410,8 +417,8 @@ impl TextAreaState {
     /// Resets all internal state.
     #[inline]
     pub fn set_value<S: AsRef<str>>(&mut self, s: S) {
-        self.vscroll = Default::default();
-        self.hscroll = Default::default();
+        self.vscroll.set_offset(0);
+        self.hscroll.set_offset(0);
 
         self.value.set_value(s);
     }
@@ -420,8 +427,8 @@ impl TextAreaState {
     /// Resets all internal state.
     #[inline]
     pub fn set_value_rope(&mut self, s: Rope) {
-        self.vscroll = Default::default();
-        self.hscroll = Default::default();
+        self.vscroll.set_offset(0);
+        self.hscroll.set_offset(0);
 
         self.value.set_value_rope(s);
     }
@@ -960,17 +967,17 @@ impl TextAreaState {
     /// This is shorter than the length of the content by whatever fills the last page.
     /// This is the base for the scrollbar content_length.
     pub fn vertical_max_offset(&self) -> usize {
-        self.vscroll.max_offset
+        self.vscroll.max_offset()
     }
 
     /// Current vertical offset.
     pub fn vertical_offset(&self) -> usize {
-        self.vscroll.offset
+        self.vscroll.offset()
     }
 
     /// Vertical page-size at the current offset.
     pub fn vertical_page(&self) -> usize {
-        self.vscroll.page_len
+        self.vscroll.page_len()
     }
 
     /// Suggested scroll per scroll-event.
@@ -982,17 +989,17 @@ impl TextAreaState {
     ///
     /// This is currently set to usize::MAX.
     pub fn horizontal_max_offset(&self) -> usize {
-        self.hscroll.max_offset
+        self.hscroll.max_offset()
     }
 
     /// Current horizontal offset.
     pub fn horizontal_offset(&self) -> usize {
-        self.hscroll.offset
+        self.hscroll.offset()
     }
 
     /// Horizontal page-size at the current offset.
     pub fn horizontal_page(&self) -> usize {
-        self.hscroll.page_len
+        self.hscroll.page_len()
     }
 
     /// Suggested scroll per scroll-event.
@@ -1032,21 +1039,24 @@ impl TextAreaState {
         self.hscroll.set_offset(pos)
     }
 
+    /// Scrolling
     pub fn scroll_up(&mut self, delta: usize) -> bool {
-        self.vscroll.change_offset(-(delta as isize))
+        self.vscroll.scroll_up(delta)
     }
 
+    /// Scrolling
     pub fn scroll_down(&mut self, delta: usize) -> bool {
-        self.vscroll.change_offset(delta as isize)
+        self.vscroll.scroll_down(delta)
     }
 
+    /// Scrolling
     pub fn scroll_left(&mut self, delta: usize) -> bool {
-        self.hscroll.change_offset(-(delta as isize))
+        self.hscroll.scroll_left(delta)
     }
 
+    /// Scrolling
     pub fn scroll_right(&mut self, delta: usize) -> bool {
-        debug!("hscroll {:?}", self.hscroll);
-        self.hscroll.change_offset(delta as isize)
+        self.hscroll.scroll_right(delta)
     }
 }
 
@@ -1225,7 +1235,7 @@ impl HandleEvent<crossterm::event::Event, ReadOnly, TextOutcome> for TextAreaSta
 
 impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaState {
     fn handle(&mut self, event: &crossterm::event::Event, _keymap: MouseOnly) -> TextOutcome {
-        match event {
+        flow!(match event {
             ct_event!(mouse any for m)
                 if self.mouse.drag(self.inner, m)
                     || self.mouse.drag2(self.inner, m, KeyModifiers::ALT) =>
@@ -1247,34 +1257,6 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
             //         TextOutcome::Unchanged
             //     }
             // }
-            ct_event!(scroll down for column,row) => {
-                if self.area.contains((*column, *row).into()) {
-                    self.scroll_down(self.vertical_scroll()).into()
-                } else {
-                    TextOutcome::NotUsed
-                }
-            }
-            ct_event!(scroll up for column, row) => {
-                if self.area.contains((*column, *row).into()) {
-                    self.scroll_up(self.vertical_scroll()).into()
-                } else {
-                    TextOutcome::NotUsed
-                }
-            }
-            ct_event!(scroll ALT down for column,row) => {
-                if self.area.contains((*column, *row).into()) {
-                    self.scroll_right(self.horizontal_scroll()).into()
-                } else {
-                    TextOutcome::NotUsed
-                }
-            }
-            ct_event!(scroll ALT up for column, row) => {
-                if self.area.contains((*column, *row).into()) {
-                    self.scroll_left(self.horizontal_scroll()).into()
-                } else {
-                    TextOutcome::NotUsed
-                }
-            }
             ct_event!(mouse down Left for column,row) => {
                 if self.inner.contains((*column, *row).into()) {
                     let cx = (column - self.inner.x) as i16;
@@ -1294,7 +1276,65 @@ impl HandleEvent<crossterm::event::Event, MouseOnly, TextOutcome> for TextAreaSt
                 }
             }
             _ => TextOutcome::NotUsed,
-        }
+        });
+
+        flow!(match self.hscroll.handle(event, MouseOnly) {
+            ScrollOutcome::Offset(v) => {
+                if self.scroll_to_col(v) {
+                    TextOutcome::Changed
+                } else {
+                    TextOutcome::NotUsed
+                }
+            }
+            _ => TextOutcome::NotUsed,
+        });
+        flow!(match self.vscroll.handle(event, MouseOnly) {
+            ScrollOutcome::Offset(v) => {
+                if self.scroll_to_row(v) {
+                    TextOutcome::Changed
+                } else {
+                    TextOutcome::NotUsed
+                }
+            }
+            _ => TextOutcome::NotUsed,
+        });
+        flow!(
+            match ScrollArea(self.inner, Some(&self.hscroll), Some(&self.vscroll))
+                .handle(event, MouseOnly)
+            {
+                ScrollOutcome::Up(v) => {
+                    if self.scroll_up(v) {
+                        TextOutcome::Changed
+                    } else {
+                        TextOutcome::NotUsed
+                    }
+                }
+                ScrollOutcome::Down(v) => {
+                    if self.scroll_down(v) {
+                        TextOutcome::Changed
+                    } else {
+                        TextOutcome::NotUsed
+                    }
+                }
+                ScrollOutcome::Left(v) => {
+                    if self.scroll_left(v) {
+                        TextOutcome::Changed
+                    } else {
+                        TextOutcome::NotUsed
+                    }
+                }
+                ScrollOutcome::Right(v) => {
+                    if self.scroll_right(v) {
+                        TextOutcome::Changed
+                    } else {
+                        TextOutcome::NotUsed
+                    }
+                }
+                _ => TextOutcome::NotUsed,
+            }
+        );
+
+        TextOutcome::NotUsed
     }
 }
 
