@@ -3,6 +3,13 @@
 Discontinued. Moved everything to rat-widget as the original reason for
 this split is no longer valid.
 
+# ...
+
+* fix: TextArea doesn't use focus-style. Too much color.
+* add layout_middle to layout Rect with 4 outer constraints.
+* use revert_style for fallback styles.
+* use new internal Scroll<'a> instead of Scrolled widget.
+
 # 0.16.6
 
 * Add PopupMenu, MenuBar widgets. Synchronize APIs with MenuLine.
