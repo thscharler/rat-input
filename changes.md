@@ -1,3 +1,8 @@
+# 0.17.0
+
+Discontinued. Moved everything to rat-widget as the original reason for
+this split is no longer valid.
+
 # 0.16.6
 
 * Add PopupMenu, MenuBar widgets. Synchronize APIs with MenuLine.
